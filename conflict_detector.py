@@ -18,17 +18,21 @@ class FileOverlap:
 
 
 @dataclass
-class ConflictResult:  # pylint: disable=too-many-instance-attributes
+class PRInfo:
+    """Minimal PR information stored within a ConflictResult."""
+
+    number: int
+    title: str
+    author: str
+    url: str
+
+
+@dataclass
+class ConflictResult:
     """A potential conflict between two PRs."""
 
-    pr_a_number: int
-    pr_a_title: str
-    pr_a_author: str
-    pr_a_url: str
-    pr_b_number: int
-    pr_b_title: str
-    pr_b_author: str
-    pr_b_url: str
+    pr_a: PRInfo
+    pr_b: PRInfo
     conflicting_files: list[FileOverlap] = field(default_factory=list)
     verified: bool = False
 
@@ -96,14 +100,18 @@ def find_file_overlaps(prs: list[PullRequestData]) -> list[ConflictResult]:
 
             if pair_key not in pair_conflicts:
                 pair_conflicts[pair_key] = ConflictResult(
-                    pr_a_number=pr_a.number,
-                    pr_a_title=pr_a.title,
-                    pr_a_author=pr_a.author,
-                    pr_a_url=pr_a.html_url,
-                    pr_b_number=pr_b.number,
-                    pr_b_title=pr_b.title,
-                    pr_b_author=pr_b.author,
-                    pr_b_url=pr_b.html_url,
+                    pr_a=PRInfo(
+                        number=pr_a.number,
+                        title=pr_a.title,
+                        author=pr_a.author,
+                        url=pr_a.html_url,
+                    ),
+                    pr_b=PRInfo(
+                        number=pr_b.number,
+                        title=pr_b.title,
+                        author=pr_b.author,
+                        url=pr_b.html_url,
+                    ),
                 )
 
             pair_conflicts[pair_key].conflicting_files.append(
@@ -134,8 +142,8 @@ def verify_conflict(
     """
     try:
         repo = github_connection.repository(owner, repo_name)  # type: ignore[union-attr]
-        pr_a = repo.pull_request(conflict.pr_a_number)
-        pr_b = repo.pull_request(conflict.pr_b_number)
+        pr_a = repo.pull_request(conflict.pr_a.number)
+        pr_b = repo.pull_request(conflict.pr_b.number)
 
         # If either PR is not mergeable on its own, they likely conflict
         if pr_a.mergeable is False or pr_b.mergeable is False:

@@ -96,8 +96,8 @@ def build_slack_message(conflicts_by_repo: dict) -> dict:
                     "text": {
                         "type": "mrkdwn",
                         "text": (
-                            f"• <{conflict.pr_a_url}|#{conflict.pr_a_number}> ({conflict.pr_a_author}) "
-                            f"↔ <{conflict.pr_b_url}|#{conflict.pr_b_number}> ({conflict.pr_b_author})\n"
+                            f"• <{conflict.pr_a.url}|#{conflict.pr_a.number}> ({conflict.pr_a.author}) "
+                            f"↔ <{conflict.pr_b.url}|#{conflict.pr_b.number}> ({conflict.pr_b.author})\n"
                             f"  Files: {files_str}"
                         ),
                     },

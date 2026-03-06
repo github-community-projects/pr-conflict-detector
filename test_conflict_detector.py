@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 from conflict_detector import (
     ConflictResult,
     FileOverlap,
+    PRInfo,
     detect_conflicts,
     find_file_overlaps,
     find_overlapping_ranges,
@@ -129,8 +130,8 @@ class TestFindFileOverlaps(unittest.TestCase):
         results = find_file_overlaps([pr_a, pr_b])
 
         assert len(results) == 1
-        assert results[0].pr_a_number == 1
-        assert results[0].pr_b_number == 2
+        assert results[0].pr_a.number == 1
+        assert results[0].pr_b.number == 2
         assert len(results[0].conflicting_files) == 1
         assert results[0].conflicting_files[0].filename == "file.py"
         assert (5, 10) in results[0].conflicting_files[0].overlapping_ranges
@@ -160,7 +161,7 @@ class TestFindFileOverlaps(unittest.TestCase):
         results = find_file_overlaps([pr_a, pr_b, pr_c])
 
         # Expect 3 conflict pairs: (1,2), (1,3), (2,3)
-        pair_numbers = {(r.pr_a_number, r.pr_b_number) for r in results}
+        pair_numbers = {(r.pr_a.number, r.pr_b.number) for r in results}
         assert (1, 2) in pair_numbers
         assert (1, 3) in pair_numbers
         assert (2, 3) in pair_numbers
@@ -209,15 +210,15 @@ class TestFindFileOverlaps(unittest.TestCase):
         assert filenames == {"a.py", "b.py"}
 
     def test_pr_pair_ordering_is_consistent(self):
-        """pr_a_number should always be less than pr_b_number."""
+        """pr_a.number should always be less than pr_b.number."""
         pr_a = _make_pr(10, [_make_file("file.py", [(1, 10)])])
         pr_b = _make_pr(5, [_make_file("file.py", [(5, 15)])])
 
         results = find_file_overlaps([pr_a, pr_b])
 
         assert len(results) == 1
-        assert results[0].pr_a_number == 5
-        assert results[0].pr_b_number == 10
+        assert results[0].pr_a.number == 5
+        assert results[0].pr_b.number == 10
 
 
 class TestDetectConflicts(unittest.TestCase):
@@ -308,14 +309,18 @@ class TestVerifyConflict(unittest.TestCase):
 
     def _make_conflict(self) -> ConflictResult:
         return ConflictResult(
-            pr_a_number=1,
-            pr_a_title="PR #1",
-            pr_a_author="alice",
-            pr_a_url="https://github.com/owner/repo/pull/1",
-            pr_b_number=2,
-            pr_b_title="PR #2",
-            pr_b_author="bob",
-            pr_b_url="https://github.com/owner/repo/pull/2",
+            pr_a=PRInfo(
+                number=1,
+                title="PR #1",
+                author="alice",
+                url="https://github.com/owner/repo/pull/1",
+            ),
+            pr_b=PRInfo(
+                number=2,
+                title="PR #2",
+                author="bob",
+                url="https://github.com/owner/repo/pull/2",
+            ),
             conflicting_files=[FileOverlap("file.py", [(1, 10)], [(5, 15)], [(5, 10)])],
         )
 

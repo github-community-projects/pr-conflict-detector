@@ -9,15 +9,12 @@ import slack_notify
 
 # Lightweight stand-ins for conflict_detector types used by slack_notify
 FileOverlap = namedtuple("FileOverlap", ["filename"])
+PRInfo = namedtuple("PRInfo", ["number", "url", "author"])
 ConflictResult = namedtuple(
     "ConflictResult",
     [
-        "pr_a_number",
-        "pr_a_url",
-        "pr_a_author",
-        "pr_b_number",
-        "pr_b_url",
-        "pr_b_author",
+        "pr_a",
+        "pr_b",
         "conflicting_files",
     ],
 )
@@ -35,12 +32,8 @@ def _make_conflict(
     """Helper to build a ConflictResult with sensible defaults."""
     files = [FileOverlap(f) for f in (filenames or ["README.md"])]
     return ConflictResult(
-        pr_a_number=pr_a_number,
-        pr_a_url=pr_a_url,
-        pr_a_author=pr_a_author,
-        pr_b_number=pr_b_number,
-        pr_b_url=pr_b_url,
-        pr_b_author=pr_b_author,
+        pr_a=PRInfo(number=pr_a_number, url=pr_a_url, author=pr_a_author),
+        pr_b=PRInfo(number=pr_b_number, url=pr_b_url, author=pr_b_author),
         conflicting_files=files,
     )
 
