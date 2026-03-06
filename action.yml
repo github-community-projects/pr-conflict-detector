@@ -1,0 +1,10 @@
+---
+name: "PR Conflict Detector"
+author: "github"
+description: "A GitHub Action to detect potential merge conflicts between open pull requests"
+runs:
+  using: "docker"
+  image: "Dockerfile"
+branding:
+  icon: "git-pull-request"
+  color: "red"
