@@ -100,6 +100,7 @@ The required GitHub App permissions under `Repository permissions` are:
 | `SLACK_WEBHOOK_URL`                    | False    | `""`                     | Slack incoming webhook URL for sending conflict notifications. See the [Slack Integration](#slack-integration) section for setup instructions.                                                            |
 | `SLACK_CHANNEL`                        | False    | `""`                     | Override the default Slack channel configured in the webhook. Example: `#pr-conflicts`                                                                                                                   |
 | `ENABLE_GITHUB_ACTIONS_STEP_SUMMARY`   | False    | `true`                   | If set to `true`, the conflict report will be written to the GitHub Actions workflow summary for easy viewing in the Actions UI.                                                                          |
+| `FILTER_AUTHORS`                       | False    | `""`                     | A comma-separated list of GitHub usernames. When set, only PRs authored by these users will be analyzed for conflicts. Useful for incremental rollout to specific teams. Example: `alice,bob,charlie`     |
 
 \*One of `ORGANIZATION` or `REPOSITORY` must be set.
 
@@ -184,6 +185,36 @@ jobs:
           EXEMPT_REPOS: "owner/repo-to-skip"
           VERIFY_CONFLICTS: "true"
 ```
+
+#### Incremental rollout to a specific team
+
+If you have a large monorepo with many contributors, you can use `FILTER_AUTHORS` to limit conflict detection to your team's PRs. This lets you roll out the action incrementally without affecting other teams:
+
+```yaml
+name: PR Conflict Detection (My Team)
+on:
+  schedule:
+    - cron: "0 9 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  detect-conflicts:
+    name: Detect PR conflicts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Detect PR Conflicts
+        uses: github-community-projects/pr-conflict-detector@v1
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          REPOSITORY: my-org/company-monolith
+          FILTER_AUTHORS: "alice,bob,charlie,dana"
+          DRY_RUN: "true"
+```
+
+As confidence grows, expand the author list or remove `FILTER_AUTHORS` entirely to cover all PRs.
 
 ## How conflict detection works
 

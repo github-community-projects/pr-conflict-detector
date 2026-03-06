@@ -30,6 +30,7 @@ class TestEnv(unittest.TestCase):
             "SLACK_CHANNEL",
             "SLACK_WEBHOOK_URL",
             "VERIFY_CONFLICTS",
+            "FILTER_AUTHORS",
         ]
         for key in env_keys:
             if key in os.environ:
@@ -74,6 +75,7 @@ class TestEnv(unittest.TestCase):
             slack_webhook_url="https://hooks.slack.com/test",
             slack_channel="#alerts",
             enable_github_actions_step_summary=False,
+            filter_authors=[],
         )
         result = get_env_vars(True)
         self.assertEqual(result, expected_result)
@@ -107,6 +109,7 @@ class TestEnv(unittest.TestCase):
             slack_webhook_url="",
             slack_channel="",
             enable_github_actions_step_summary=True,
+            filter_authors=[],
         )
         result = get_env_vars(True)
         self.assertEqual(result, expected_result)
@@ -140,6 +143,7 @@ class TestEnv(unittest.TestCase):
             slack_webhook_url="",
             slack_channel="",
             enable_github_actions_step_summary=True,
+            filter_authors=[],
         )
         result = get_env_vars(True)
         self.assertEqual(result, expected_result)
@@ -302,6 +306,47 @@ class TestEnv(unittest.TestCase):
         with patch.dict(os.environ, {"TEST_VAR": "not_a_number"}):
             result = get_int_env_var("TEST_VAR")
             self.assertIsNone(result)
+
+    @patch.dict(
+        os.environ,
+        {
+            "ORGANIZATION": "my_organization",
+            "GH_TOKEN": "my_token",
+            "FILTER_AUTHORS": "alice, @bob , charlie",
+        },
+        clear=True,
+    )
+    def test_get_env_vars_filter_authors(self):
+        """Test that FILTER_AUTHORS parses correctly with @ prefix stripping"""
+        result = get_env_vars(True)
+        self.assertEqual(result.filter_authors, ["alice", "bob", "charlie"])
+
+    @patch.dict(
+        os.environ,
+        {
+            "ORGANIZATION": "my_organization",
+            "GH_TOKEN": "my_token",
+            "FILTER_AUTHORS": "",
+        },
+        clear=True,
+    )
+    def test_get_env_vars_filter_authors_empty(self):
+        """Test that empty FILTER_AUTHORS results in empty list"""
+        result = get_env_vars(True)
+        self.assertEqual(result.filter_authors, [])
+
+    @patch.dict(
+        os.environ,
+        {
+            "ORGANIZATION": "my_organization",
+            "GH_TOKEN": "my_token",
+        },
+        clear=True,
+    )
+    def test_get_env_vars_filter_authors_not_set(self):
+        """Test that unset FILTER_AUTHORS defaults to empty list"""
+        result = get_env_vars(True)
+        self.assertEqual(result.filter_authors, [])
 
 
 if __name__ == "__main__":

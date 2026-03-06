@@ -31,6 +31,7 @@ class EnvVars:  # pylint: disable=too-many-instance-attributes
     slack_webhook_url: str
     slack_channel: str
     enable_github_actions_step_summary: bool
+    filter_authors: list[str]
 
 
 def get_bool_env_var(env_var_name: str, default: bool = False) -> bool:
@@ -156,6 +157,16 @@ def get_env_vars(test: bool = False) -> EnvVars:
         "ENABLE_GITHUB_ACTIONS_STEP_SUMMARY", default=True
     )
 
+    # Parse filter authors
+    filter_authors_str = os.getenv("FILTER_AUTHORS")
+    filter_authors: list[str] = []
+    if filter_authors_str:
+        filter_authors = [
+            author.strip().lstrip("@")
+            for author in filter_authors_str.split(",")
+            if author.strip()
+        ]
+
     return EnvVars(
         gh_app_id=gh_app_id,
         gh_app_installation_id=gh_app_installation_id,
@@ -175,4 +186,5 @@ def get_env_vars(test: bool = False) -> EnvVars:
         slack_webhook_url=slack_webhook_url,
         slack_channel=slack_channel,
         enable_github_actions_step_summary=enable_github_actions_step_summary,
+        filter_authors=filter_authors,
     )

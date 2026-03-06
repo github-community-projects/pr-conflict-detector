@@ -29,6 +29,7 @@ def _make_env_vars(**overrides):
         "slack_webhook_url": "",
         "slack_channel": "",
         "enable_github_actions_step_summary": False,
+        "filter_authors": [],
     }
     defaults.update(overrides)
     return EnvVars(**defaults)
@@ -43,12 +44,12 @@ def _make_repo(full_name="test-org/repo-a", archived=False):
     return repo
 
 
-def _make_pr(number, title="PR title"):
+def _make_pr(number, title="PR title", author="dev"):
     """Create a minimal PullRequestData for testing."""
     return PullRequestData(
         number=number,
         title=title,
-        author="dev",
+        author=author,
         html_url=f"https://github.com/test-org/repo-a/pull/{number}",
         is_draft=False,
         base_branch="main",
@@ -418,6 +419,85 @@ class TestExemptPRsFiltered(unittest.TestCase):
         self.assertNotIn(pr2, detected_prs)
         self.assertIn(pr1, detected_prs)
         self.assertIn(pr3, detected_prs)
+
+
+@patch("pr_conflict_detector.send_slack_notification")
+@patch("pr_conflict_detector.create_or_update_issue")
+@patch("pr_conflict_detector.write_to_json")
+@patch("pr_conflict_detector.write_to_markdown")
+@patch("pr_conflict_detector.detect_conflicts")
+@patch("pr_conflict_detector.fetch_all_pr_data")
+@patch("pr_conflict_detector.auth.auth_to_github")
+@patch("pr_conflict_detector.env.get_env_vars")
+class TestFilterAuthors(unittest.TestCase):
+    """Test that filter_authors restricts which PRs are analyzed."""
+
+    def test_filter_authors_keeps_matching_prs(
+        self,
+        mock_get_env,
+        mock_auth,
+        mock_fetch,
+        mock_detect,
+        _mock_md,
+        _mock_json,
+        _mock_issue,
+        _mock_slack,
+    ):
+        """Verify that only PRs from matching authors are passed to detect_conflicts."""
+        repo = _make_repo("test-org/repo-a")
+        env_vars = _make_env_vars(filter_authors=["alice", "bob"])
+        mock_get_env.return_value = env_vars
+
+        gh = MagicMock()
+        mock_auth.return_value = gh
+        org_mock = MagicMock()
+        org_mock.repositories.return_value = [repo]
+        gh.organization.return_value = org_mock
+
+        pr_alice = _make_pr(1, author="alice")
+        pr_bob = _make_pr(2, author="bob")
+        pr_charlie = _make_pr(3, author="charlie")
+        mock_fetch.return_value = [pr_alice, pr_bob, pr_charlie]
+        mock_detect.return_value = []
+
+        main()
+
+        mock_detect.assert_called_once()
+        detected_prs = mock_detect.call_args[0][0]
+        self.assertEqual(len(detected_prs), 2)
+        self.assertIn(pr_alice, detected_prs)
+        self.assertIn(pr_bob, detected_prs)
+        self.assertNotIn(pr_charlie, detected_prs)
+
+    def test_filter_authors_no_matching_prs_skips_repo(
+        self,
+        mock_get_env,
+        mock_auth,
+        mock_fetch,
+        mock_detect,
+        _mock_md,
+        _mock_json,
+        _mock_issue,
+        _mock_slack,
+    ):
+        """Verify that when no PRs match the filter, conflict detection is skipped."""
+        repo = _make_repo("test-org/repo-a")
+        env_vars = _make_env_vars(filter_authors=["alice"])
+        mock_get_env.return_value = env_vars
+
+        gh = MagicMock()
+        mock_auth.return_value = gh
+        org_mock = MagicMock()
+        org_mock.repositories.return_value = [repo]
+        gh.organization.return_value = org_mock
+
+        pr_bob = _make_pr(1, author="bob")
+        pr_charlie = _make_pr(2, author="charlie")
+        mock_fetch.return_value = [pr_bob, pr_charlie]
+
+        main()
+
+        mock_detect.assert_not_called()
 
 
 if __name__ == "__main__":

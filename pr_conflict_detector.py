@@ -60,6 +60,13 @@ def main():
         if env_vars.exempt_prs:
             prs = [pr for pr in prs if pr.number not in env_vars.exempt_prs]
 
+        # Filter by author if configured
+        if env_vars.filter_authors:
+            prs = [pr for pr in prs if pr.author in env_vars.filter_authors]
+            if not prs:
+                print(f"  No PRs from filtered authors: {env_vars.filter_authors}")
+                continue
+
         if len(prs) < 2:
             print(f"  {len(prs)} open PR(s) - need at least 2 to detect conflicts")
             continue
