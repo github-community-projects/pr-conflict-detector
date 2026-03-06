@@ -1,6 +1,6 @@
 # PR Conflict Detector
 
-[![CodeQL](https://github.com/github-community-projects/pr-conflict-detector/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/github-community-projects/pr-conflict-detector/actions/workflows/github-code-scanning/codeql)
+[![CodeQL](https://github.com/github-community-projects/pr-conflict-detector/actions/workflows/codeql/badge.svg)](https://github.com/github-community-projects/pr-conflict-detector/actions/workflows/codeql)
 [![Docker Image CI](https://github.com/github-community-projects/pr-conflict-detector/actions/workflows/docker-ci.yml/badge.svg)](https://github.com/github-community-projects/pr-conflict-detector/actions/workflows/docker-ci.yml)
 [![Python package](https://github.com/github-community-projects/pr-conflict-detector/actions/workflows/python-ci.yml/badge.svg)](https://github.com/github-community-projects/pr-conflict-detector/actions/workflows/python-ci.yml)
 
@@ -231,6 +231,10 @@ When conflicts are detected, a Slack message is sent with the following format:
 # Clone the repository
 git clone https://github.com/github-community-projects/pr-conflict-detector.git
 cd pr-conflict-detector
+
+# Set up a virtual environment
+python3 -m venv venv
+source venv/bin/activate
 
 # Set up environment
 cp .env-example .env

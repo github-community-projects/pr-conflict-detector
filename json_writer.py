@@ -72,9 +72,11 @@ def write_to_json(
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(output, f, indent=4)
 
-    # Write to GITHUB_OUTPUT if available
+    # Write to GITHUB_OUTPUT if available (multiline requires delimiter)
     if os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-            print(f"conflicts_json={metrics_json}", file=fh)
+            print("conflicts_json<<EOF", file=fh)
+            print(metrics_json, file=fh)
+            print("EOF", file=fh)
 
     return metrics_json

@@ -147,7 +147,8 @@ class TestWriteToJson:
 
         with open(gh_output_file, encoding="utf-8") as f:
             content = f.read()
-        assert content.startswith("conflicts_json=")
+        assert content.startswith("conflicts_json<<EOF")
+        assert content.strip().endswith("EOF")
 
     def test_repos_with_empty_conflicts(self, tmp_path):
         """Test JSON output when a repo has an empty conflict list."""
