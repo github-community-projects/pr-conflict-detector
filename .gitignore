@@ -36,3 +36,4 @@ coverage.xml
 .env
 .vscode/
 .DS_Store
+venv/
