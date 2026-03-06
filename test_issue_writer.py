@@ -186,3 +186,23 @@ class TestCreateOrUpdateIssue:
         assert "L10-L20" in body
         assert "@eve" in body
         assert "@frank" in body
+
+    def test_cluster_rendering_in_issue(self):
+        """Multi-PR clusters should render with cluster headers in the issue body."""
+        pr1 = _make_pr(1, "Feature A", "alice")
+        pr2 = _make_pr(2, "Feature B", "bob")
+        pr3 = _make_pr(3, "Feature C", "charlie")
+        c12 = _make_conflict(pr1, pr2)
+        c13 = _make_conflict(pr1, pr3)
+        c23 = _make_conflict(pr2, pr3)
+
+        repo = _make_mock_repo()
+        create_or_update_issue(repo, [c12, c13, c23])
+
+        body = repo.create_issue.call_args[1]["body"]
+        assert "Cluster 1" in body
+        assert "3 PRs" in body
+        assert "<details>" in body
+        assert "@alice" in body
+        assert "@bob" in body
+        assert "@charlie" in body

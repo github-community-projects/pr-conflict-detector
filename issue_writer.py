@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from conflict_detector import ConflictCluster, cluster_conflicts
+
 if TYPE_CHECKING:
     from github3.repos.repo import Repository
 
@@ -76,10 +78,60 @@ def _build_issue_body(conflicts: list) -> str:
     body = ISSUE_TAG + "\n"
     body += ISSUE_HEADER
 
-    body += "| PR A | PR B | Conflicting Files " "| Overlapping Lines | Authors |\n"
-    body += "|------|------|-------------------" "|-------------------|---------|\n"
+    clusters = cluster_conflicts(conflicts)
 
-    for conflict in conflicts:
+    for i, cluster in enumerate(clusters, 1):
+        if len(cluster.prs) == 2:
+            body += _build_pair_section(cluster.conflicts[0])
+        else:
+            body += _build_cluster_section(cluster, i)
+
+    return body
+
+
+def _build_pair_section(conflict) -> str:
+    """Build markdown for a simple two-PR conflict."""
+    pr_a_link = f"[#{conflict.pr_a.number}]({conflict.pr_a.url})"
+    pr_b_link = f"[#{conflict.pr_b.number}]({conflict.pr_b.url})"
+    authors = _format_authors(conflict)
+
+    file_parts = []
+    for fo in conflict.conflicting_files:
+        ranges = ", ".join(f"L{start}-L{end}" for start, end in fo.overlapping_ranges)
+        file_parts.append(f"`{fo.filename}` ({ranges})")
+
+    return (
+        f"**{pr_a_link}** ↔ **{pr_b_link}** — "
+        f"{', '.join(file_parts)} — {authors}\n\n"
+    )
+
+
+def _build_cluster_section(cluster: ConflictCluster, index: int) -> str:
+    """Build markdown for a multi-PR cluster."""
+    authors: set[str] = set()
+    pr_lines = []
+    for pr in cluster.prs:
+        pr_lines.append(f"- [#{pr.number}]({pr.url}) {pr.title}")
+        if pr.author:
+            authors.add(f"@{pr.author}")
+
+    files_str = ", ".join(f"`{f}`" for f in cluster.shared_files)
+    authors_str = ", ".join(sorted(authors))
+
+    section = (
+        f"### Cluster {index} — {len(cluster.prs)} PRs, "
+        f"{len(cluster.conflicts)} conflict(s)\n\n"
+    )
+    section += f"**Authors:** {authors_str}\n\n"
+    section += f"**Files:** {files_str}\n\n"
+    section += "**PRs:**\n"
+    section += "\n".join(pr_lines) + "\n\n"
+
+    section += "<details>\n<summary>Pairwise details</summary>\n\n"
+    section += "| PR A | PR B | Files | Lines | Authors |\n"
+    section += "|------|------|-------|-------|---------|\n"
+
+    for conflict in cluster.conflicts:
         pr_a_link = (
             f"[#{conflict.pr_a.number}]({conflict.pr_a.url}) {conflict.pr_a.title}"
         )
@@ -96,18 +148,22 @@ def _build_issue_body(conflicts: list) -> str:
             )
             line_parts.append(ranges)
 
-        files_str = ", ".join(file_parts)
-        lines_str = ", ".join(line_parts)
-
-        authors: set[str] = set()
-        if conflict.pr_a.author:
-            authors.add(f"@{conflict.pr_a.author}")
-        if conflict.pr_b.author:
-            authors.add(f"@{conflict.pr_b.author}")
-
-        body += (
+        pair_authors = _format_authors(conflict)
+        section += (
             f"| {pr_a_link} | {pr_b_link} "
-            f"| {files_str} | {lines_str} | {', '.join(sorted(authors))} |\n"
+            f"| {', '.join(file_parts)} | {', '.join(line_parts)} "
+            f"| {pair_authors} |\n"
         )
 
-    return body
+    section += "\n</details>\n\n"
+    return section
+
+
+def _format_authors(conflict) -> str:
+    """Return a deduplicated, sorted string of @-mentioned authors."""
+    authors: set[str] = set()
+    if conflict.pr_a.author:
+        authors.add(f"@{conflict.pr_a.author}")
+    if conflict.pr_b.author:
+        authors.add(f"@{conflict.pr_b.author}")
+    return ", ".join(sorted(authors))

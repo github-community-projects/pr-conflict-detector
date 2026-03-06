@@ -7,6 +7,7 @@ from conflict_detector import (
     ConflictResult,
     FileOverlap,
     PRInfo,
+    cluster_conflicts,
     detect_conflicts,
     find_file_overlaps,
     find_overlapping_ranges,
@@ -375,6 +376,123 @@ class TestVerifyConflict(unittest.TestCase):
         result = verify_conflict(conflict, mock_gh, "owner", "repo")
 
         assert result is False
+
+
+class TestClusterConflicts(unittest.TestCase):
+    """Test the cluster_conflicts function."""
+
+    def test_empty_conflicts(self):
+        """Empty input produces no clusters."""
+
+        assert not cluster_conflicts([])
+
+    def test_single_pair_becomes_single_cluster(self):
+        """A single conflict pair produces one cluster with 2 PRs."""
+
+        conflict = ConflictResult(
+            pr_a=PRInfo(1, "PR 1", "alice", "http://pr/1"),
+            pr_b=PRInfo(2, "PR 2", "bob", "http://pr/2"),
+            conflicting_files=[FileOverlap("f.py", [(1, 5)], [(1, 5)], [(1, 5)])],
+        )
+        clusters = cluster_conflicts([conflict])
+
+        assert len(clusters) == 1
+        assert len(clusters[0].prs) == 2
+        assert len(clusters[0].conflicts) == 1
+        assert clusters[0].shared_files == ["f.py"]
+
+    def test_three_prs_form_one_cluster(self):
+        """Three PRs all conflicting with each other form a single cluster."""
+
+        c12 = ConflictResult(
+            pr_a=PRInfo(1, "PR 1", "alice", "http://pr/1"),
+            pr_b=PRInfo(2, "PR 2", "bob", "http://pr/2"),
+            conflicting_files=[FileOverlap("f.py", [(1, 10)], [(5, 15)], [(5, 10)])],
+        )
+        c13 = ConflictResult(
+            pr_a=PRInfo(1, "PR 1", "alice", "http://pr/1"),
+            pr_b=PRInfo(3, "PR 3", "charlie", "http://pr/3"),
+            conflicting_files=[FileOverlap("f.py", [(1, 10)], [(8, 20)], [(8, 10)])],
+        )
+        c23 = ConflictResult(
+            pr_a=PRInfo(2, "PR 2", "bob", "http://pr/2"),
+            pr_b=PRInfo(3, "PR 3", "charlie", "http://pr/3"),
+            conflicting_files=[FileOverlap("f.py", [(5, 15)], [(8, 20)], [(8, 15)])],
+        )
+
+        clusters = cluster_conflicts([c12, c13, c23])
+
+        assert len(clusters) == 1
+        pr_numbers = {p.number for p in clusters[0].prs}
+        assert pr_numbers == {1, 2, 3}
+        assert len(clusters[0].conflicts) == 3
+
+    def test_disjoint_pairs_form_separate_clusters(self):
+        """Two independent conflict pairs form two clusters."""
+
+        c12 = ConflictResult(
+            pr_a=PRInfo(1, "PR 1", "alice", "http://pr/1"),
+            pr_b=PRInfo(2, "PR 2", "bob", "http://pr/2"),
+            conflicting_files=[FileOverlap("a.py", [(1, 5)], [(1, 5)], [(1, 5)])],
+        )
+        c34 = ConflictResult(
+            pr_a=PRInfo(3, "PR 3", "charlie", "http://pr/3"),
+            pr_b=PRInfo(4, "PR 4", "dave", "http://pr/4"),
+            conflicting_files=[FileOverlap("b.py", [(1, 5)], [(1, 5)], [(1, 5)])],
+        )
+
+        clusters = cluster_conflicts([c12, c34])
+
+        assert len(clusters) == 2
+        cluster_sizes = sorted(len(c.prs) for c in clusters)
+        assert cluster_sizes == [2, 2]
+
+    def test_transitive_connection_merges_clusters(self):
+        """PRs 1-2 and 2-3 merge into one cluster via PR 2."""
+
+        c12 = ConflictResult(
+            pr_a=PRInfo(1, "PR 1", "alice", "http://pr/1"),
+            pr_b=PRInfo(2, "PR 2", "bob", "http://pr/2"),
+            conflicting_files=[FileOverlap("a.py", [(1, 10)], [(5, 15)], [(5, 10)])],
+        )
+        c23 = ConflictResult(
+            pr_a=PRInfo(2, "PR 2", "bob", "http://pr/2"),
+            pr_b=PRInfo(3, "PR 3", "charlie", "http://pr/3"),
+            conflicting_files=[FileOverlap("b.py", [(1, 10)], [(5, 15)], [(5, 10)])],
+        )
+
+        clusters = cluster_conflicts([c12, c23])
+
+        assert len(clusters) == 1
+        pr_numbers = {p.number for p in clusters[0].prs}
+        assert pr_numbers == {1, 2, 3}
+        assert set(clusters[0].shared_files) == {"a.py", "b.py"}
+
+    def test_clusters_sorted_largest_first(self):
+        """Clusters are sorted by number of PRs, largest first."""
+
+        # Big cluster: 1-2, 2-3 (3 PRs)
+        c12 = ConflictResult(
+            pr_a=PRInfo(1, "A", "a", "u/1"),
+            pr_b=PRInfo(2, "B", "b", "u/2"),
+            conflicting_files=[FileOverlap("f.py", [(1, 5)], [(1, 5)], [(1, 5)])],
+        )
+        c23 = ConflictResult(
+            pr_a=PRInfo(2, "B", "b", "u/2"),
+            pr_b=PRInfo(3, "C", "c", "u/3"),
+            conflicting_files=[FileOverlap("f.py", [(1, 5)], [(1, 5)], [(1, 5)])],
+        )
+        # Small cluster: 10-11 (2 PRs)
+        c1011 = ConflictResult(
+            pr_a=PRInfo(10, "X", "x", "u/10"),
+            pr_b=PRInfo(11, "Y", "y", "u/11"),
+            conflicting_files=[FileOverlap("g.py", [(1, 5)], [(1, 5)], [(1, 5)])],
+        )
+
+        clusters = cluster_conflicts([c1011, c12, c23])
+
+        assert len(clusters[0].prs) == 3
+        assert len(clusters[1].prs) == 2
 
 
 if __name__ == "__main__":

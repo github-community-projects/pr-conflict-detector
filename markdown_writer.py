@@ -2,6 +2,8 @@
 
 import os
 
+from conflict_detector import ConflictCluster, cluster_conflicts
+
 
 def write_to_markdown(
     conflicts_by_repo: dict,
@@ -61,46 +63,99 @@ def generate_markdown(
 
     for repo_name, conflicts in repos_with_conflicts.items():
         content += f"## {repo_name}\n\n"
-        content += (
-            "| PR A | PR B | Conflicting Files " "| Overlapping Lines | Authors |\n"
-        )
-        content += (
-            "|------|------|-------------------" "|-------------------|---------|\n"
-        )
-
-        for conflict in conflicts:
-            pr_a_link = (
-                f"[#{conflict.pr_a.number}]({conflict.pr_a.url}) {conflict.pr_a.title}"
-            )
-            pr_b_link = (
-                f"[#{conflict.pr_b.number}]({conflict.pr_b.url}) {conflict.pr_b.title}"
-            )
-
-            file_parts = []
-            line_parts = []
-            for file_overlap in conflict.conflicting_files:
-                file_parts.append(f"`{file_overlap.filename}`")
-                ranges = ", ".join(
-                    f"L{start}-L{end}" for start, end in file_overlap.overlapping_ranges
-                )
-                line_parts.append(ranges)
-
-            files_str = ", ".join(file_parts)
-            lines_str = ", ".join(line_parts)
-
-            authors = _format_authors(conflict)
-
-            content += (
-                f"| {pr_a_link} | {pr_b_link} "
-                f"| {files_str} | {lines_str} | {authors} |\n"
-            )
-
-        content += "\n"
+        clusters = cluster_conflicts(conflicts)
+        content += _render_clusters(clusters)
 
     return content
 
 
-def _format_authors(conflict) -> str:
+def _render_clusters(clusters: list[ConflictCluster]) -> str:
+    """Render conflict clusters as markdown."""
+    content = ""
+    for i, cluster in enumerate(clusters, 1):
+        if len(cluster.prs) == 2:
+            # Simple pair — render inline without cluster wrapper
+            conflict = cluster.conflicts[0]
+            content += _render_pair_row(conflict)
+        else:
+            # Multi-PR cluster — render as a grouped section
+            content += _render_cluster_section(cluster, i)
+    return content
+
+
+def _render_pair_row(conflict) -> str:
+    """Render a single pairwise conflict as a compact section."""
+    pr_a_link = f"[#{conflict.pr_a.number}]({conflict.pr_a.url})"
+    pr_b_link = f"[#{conflict.pr_b.number}]({conflict.pr_b.url})"
+    authors = _format_authors_from_conflict(conflict)
+
+    file_parts = []
+    for fo in conflict.conflicting_files:
+        ranges = ", ".join(f"L{start}-L{end}" for start, end in fo.overlapping_ranges)
+        file_parts.append(f"`{fo.filename}` ({ranges})")
+
+    files_str = ", ".join(file_parts)
+
+    return f"**{pr_a_link}** ↔ **{pr_b_link}** — " f"{files_str} — {authors}\n\n"
+
+
+def _render_cluster_section(cluster: ConflictCluster, index: int) -> str:
+    """Render a multi-PR cluster with summary and collapsible detail."""
+    pr_links = []
+    authors: set[str] = set()
+    for pr in cluster.prs:
+        pr_links.append(f"[#{pr.number}]({pr.url}) {pr.title}")
+        if pr.author:
+            authors.add(f"@{pr.author}")
+
+    files_str = ", ".join(f"`{f}`" for f in cluster.shared_files)
+    authors_str = ", ".join(sorted(authors))
+
+    content = (
+        f"### Cluster {index} — {len(cluster.prs)} PRs, "
+        f"{len(cluster.conflicts)} conflict(s)\n\n"
+    )
+    content += f"**Authors:** {authors_str}\n\n"
+    content += f"**Files:** {files_str}\n\n"
+    content += "**PRs:**\n"
+    for link in pr_links:
+        content += f"- {link}\n"
+    content += "\n"
+
+    content += "<details>\n<summary>Pairwise details</summary>\n\n"
+    content += "| PR A | PR B | Conflicting Files " "| Overlapping Lines | Authors |\n"
+    content += "|------|------|-------------------" "|-------------------|---------|\n"
+
+    for conflict in cluster.conflicts:
+        pr_a_link = (
+            f"[#{conflict.pr_a.number}]({conflict.pr_a.url}) {conflict.pr_a.title}"
+        )
+        pr_b_link = (
+            f"[#{conflict.pr_b.number}]({conflict.pr_b.url}) {conflict.pr_b.title}"
+        )
+
+        file_parts = []
+        line_parts = []
+        for fo in conflict.conflicting_files:
+            file_parts.append(f"`{fo.filename}`")
+            ranges = ", ".join(
+                f"L{start}-L{end}" for start, end in fo.overlapping_ranges
+            )
+            line_parts.append(ranges)
+
+        pair_authors = _format_authors_from_conflict(conflict)
+
+        content += (
+            f"| {pr_a_link} | {pr_b_link} "
+            f"| {', '.join(file_parts)} | {', '.join(line_parts)} "
+            f"| {pair_authors} |\n"
+        )
+
+    content += "\n</details>\n\n"
+    return content
+
+
+def _format_authors_from_conflict(conflict) -> str:
     """Return a deduplicated, sorted string of @-mentioned authors."""
     authors: set[str] = set()
     if conflict.pr_a.author:

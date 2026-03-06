@@ -142,6 +142,22 @@ class TestBuildSlackMessage(unittest.TestCase):
         self.assertIn("org/alpha", all_text)
         self.assertIn("org/beta", all_text)
 
+    def test_build_slack_message_cluster(self):
+        """Multi-PR cluster should render with cluster summary."""
+        # 3 PRs all conflicting → 1 cluster
+        c12 = _make_conflict(pr_a_number=1, pr_b_number=2)
+        c13 = _make_conflict(pr_a_number=1, pr_b_number=3)
+        c23 = _make_conflict(pr_a_number=2, pr_b_number=3)
+
+        conflicts = {"org/repo": [c12, c13, c23]}
+        message = slack_notify.build_slack_message(conflicts)
+
+        all_text = " ".join(
+            b.get("text", {}).get("text", "") for b in message["blocks"] if "text" in b
+        )
+        self.assertIn("Cluster", all_text)
+        self.assertIn("3 PRs", all_text)
+
 
 class TestPostToSlack(unittest.TestCase):
     """Tests for the post_to_slack function."""

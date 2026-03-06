@@ -37,6 +37,15 @@ class ConflictResult:
     verified: bool = False
 
 
+@dataclass
+class ConflictCluster:
+    """A group of PRs that are transitively connected by conflicts."""
+
+    prs: list[PRInfo] = field(default_factory=list)
+    conflicts: list[ConflictResult] = field(default_factory=list)
+    shared_files: list[str] = field(default_factory=list)
+
+
 def ranges_overlap(range_a: tuple[int, int], range_b: tuple[int, int]) -> bool:
     """Check if two line ranges (start, end) overlap.
 
@@ -183,3 +192,69 @@ def detect_conflicts(
     conflicts.sort(key=lambda c: len(c.conflicting_files), reverse=True)
 
     return conflicts
+
+
+def cluster_conflicts(conflicts: list[ConflictResult]) -> list[ConflictCluster]:
+    """Group pairwise conflicts into clusters of transitively connected PRs.
+
+    Uses union-find to merge PR pairs that share conflicts into connected
+    components. Each cluster contains all PRs and all pairwise conflicts
+    within the group.
+    """
+    if not conflicts:
+        return []
+
+    # Union-Find
+    parent: dict[int, int] = {}
+
+    def find(x: int) -> int:
+        while parent.get(x, x) != x:
+            parent[x] = parent.get(parent[x], parent[x])
+            x = parent[x]
+        return x
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    # Build PR info lookup and union all pairs
+    pr_lookup: dict[int, PRInfo] = {}
+    for conflict in conflicts:
+        pr_lookup[conflict.pr_a.number] = conflict.pr_a
+        pr_lookup[conflict.pr_b.number] = conflict.pr_b
+        union(conflict.pr_a.number, conflict.pr_b.number)
+
+    # Group conflicts by cluster root
+    cluster_conflicts_map: dict[int, list[ConflictResult]] = defaultdict(list)
+    cluster_prs: dict[int, set[int]] = defaultdict(set)
+
+    for conflict in conflicts:
+        root = find(conflict.pr_a.number)
+        cluster_conflicts_map[root].append(conflict)
+        cluster_prs[root].add(conflict.pr_a.number)
+        cluster_prs[root].add(conflict.pr_b.number)
+
+    # Build ConflictCluster objects
+    clusters = []
+    for root, pr_numbers in cluster_prs.items():
+        prs = sorted([pr_lookup[n] for n in pr_numbers], key=lambda p: p.number)
+        cluster_conflict_list = cluster_conflicts_map[root]
+
+        # Collect all filenames involved in this cluster
+        all_files: set[str] = set()
+        for conflict in cluster_conflict_list:
+            for fo in conflict.conflicting_files:
+                all_files.add(fo.filename)
+
+        clusters.append(
+            ConflictCluster(
+                prs=prs,
+                conflicts=cluster_conflict_list,
+                shared_files=sorted(all_files),
+            )
+        )
+
+    # Sort clusters: largest first
+    clusters.sort(key=lambda c: len(c.prs), reverse=True)
+    return clusters

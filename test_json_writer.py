@@ -66,7 +66,9 @@ class TestWriteToJson:
         assert repo["name"] == "owner/repo"
         assert repo["total_conflicts"] == 1
 
-        c = repo["conflicts"][0]
+        cluster = repo["clusters"][0]
+        assert len(cluster["prs"]) == 2
+        c = cluster["conflicts"][0]
         assert c["pr_a"]["number"] == 1
         assert c["pr_a"]["title"] == "Add feature"
         assert c["pr_a"]["author"] == "alice"
@@ -91,7 +93,7 @@ class TestWriteToJson:
         with open(output_file, encoding="utf-8") as f:
             data = json.load(f)
 
-        cf = data["repositories"][0]["conflicts"][0]["conflicting_files"]
+        cf = data["repositories"][0]["clusters"][0]["conflicts"][0]["conflicting_files"]
         assert len(cf) == 2
         assert cf[0]["filename"] == "src/main.py"
         assert cf[0]["overlapping_ranges"] == [[1, 10], [20, 30]]
@@ -123,7 +125,9 @@ class TestWriteToJson:
         result = write_to_json({"owner/repo": [conflict]}, output_file=output_file)
 
         data = json.loads(result)
-        assert data["repositories"][0]["conflicts"][0]["verified"] is True
+        assert (
+            data["repositories"][0]["clusters"][0]["conflicts"][0]["verified"] is True
+        )
 
     def test_file_written_to_disk(self, tmp_path):
         """Test that the JSON report file is written to disk."""

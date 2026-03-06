@@ -129,6 +129,46 @@ class TestGenerateMarkdown:
         result = generate_markdown({}, report_title="My Report")
         assert result.startswith("# My Report\n")
 
+    def test_cluster_with_three_prs(self):
+        """Test that 3+ PR clusters render with grouped headings."""
+        pr1 = _make_pr(1, "Feature A", "alice")
+        pr2 = _make_pr(2, "Feature B", "bob")
+        pr3 = _make_pr(3, "Feature C", "charlie")
+        c12 = _make_conflict(pr1, pr2)
+        c13 = _make_conflict(pr1, pr3)
+        c23 = _make_conflict(pr2, pr3)
+
+        result = generate_markdown({"owner/repo": [c12, c13, c23]})
+
+        assert "### Cluster 1" in result
+        assert "3 PRs" in result
+        assert "3 conflict(s)" in result
+        assert "<details>" in result
+        assert "Pairwise details" in result
+        assert "@alice" in result
+        assert "@bob" in result
+        assert "@charlie" in result
+
+    def test_mix_of_pairs_and_clusters(self):
+        """Test output with both a simple pair and a multi-PR cluster."""
+        pr1 = _make_pr(1, "A", "alice")
+        pr2 = _make_pr(2, "B", "bob")
+        pr3 = _make_pr(3, "C", "charlie")
+        # Cluster: 1-2, 2-3
+        c12 = _make_conflict(pr1, pr2, [_make_file_overlap("shared.py")])
+        c23 = _make_conflict(pr2, pr3, [_make_file_overlap("shared.py")])
+        # Separate pair: 10-11
+        pr10 = _make_pr(10, "X", "xavier")
+        pr11 = _make_pr(11, "Y", "yvette")
+        c1011 = _make_conflict(pr10, pr11, [_make_file_overlap("other.py")])
+
+        result = generate_markdown({"owner/repo": [c12, c23, c1011]})
+
+        # Should have a cluster section and a pair section
+        assert "Cluster" in result
+        assert "[#10]" in result
+        assert "[#11]" in result
+
 
 class TestWriteToMarkdown:
     """Tests for write_to_markdown()."""

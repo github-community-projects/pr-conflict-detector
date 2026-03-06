@@ -37,3 +37,6 @@ coverage.xml
 .vscode/
 .DS_Store
 venv/
+
+pr_conflict_report.json
+pr_conflict_report.md

@@ -4,6 +4,7 @@ import json
 import logging
 
 import requests
+from conflict_detector import cluster_conflicts
 
 logger = logging.getLogger(__name__)
 
@@ -72,10 +73,12 @@ def build_slack_message(conflicts_by_repo: dict) -> dict:
         }
     )
 
-    # Per-repo sections
+    # Per-repo sections with clustering
     for repo_name, conflicts in conflicts_by_repo.items():
         if not conflicts:
             continue
+
+        clusters = cluster_conflicts(conflicts)
 
         blocks.append({"type": "divider"})
         blocks.append(
@@ -83,26 +86,50 @@ def build_slack_message(conflicts_by_repo: dict) -> dict:
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"*{repo_name}* - {len(conflicts)} conflict(s)",
+                    "text": (
+                        f"*{repo_name}* — {len(conflicts)} conflict(s) "
+                        f"in {len(clusters)} cluster(s)"
+                    ),
                 },
             }
         )
 
-        for conflict in conflicts:
-            files_str = ", ".join(f"`{f.filename}`" for f in conflict.conflicting_files)
-            blocks.append(
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": (
-                            f"• <{conflict.pr_a.url}|#{conflict.pr_a.number}> ({conflict.pr_a.author}) "
-                            f"↔ <{conflict.pr_b.url}|#{conflict.pr_b.number}> ({conflict.pr_b.author})\n"
-                            f"  Files: {files_str}"
-                        ),
-                    },
-                }
-            )
+        for cluster in clusters:
+            if len(cluster.prs) == 2:
+                conflict = cluster.conflicts[0]
+                files_str = ", ".join(
+                    f"`{f.filename}`" for f in conflict.conflicting_files
+                )
+                blocks.append(
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": (
+                                f"• <{conflict.pr_a.url}|#{conflict.pr_a.number}> ({conflict.pr_a.author}) "
+                                f"↔ <{conflict.pr_b.url}|#{conflict.pr_b.number}> ({conflict.pr_b.author})\n"
+                                f"  Files: {files_str}"
+                            ),
+                        },
+                    }
+                )
+            else:
+                pr_list = ", ".join(f"<{pr.url}|#{pr.number}>" for pr in cluster.prs)
+                files_str = ", ".join(f"`{f}`" for f in cluster.shared_files)
+                blocks.append(
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": (
+                                f"🔗 *Cluster: {len(cluster.prs)} PRs, "
+                                f"{len(cluster.conflicts)} conflict(s)*\n"
+                                f"  PRs: {pr_list}\n"
+                                f"  Files: {files_str}"
+                            ),
+                        },
+                    }
+                )
 
     return {"blocks": blocks}
 

@@ -3,6 +3,8 @@
 import json
 import os
 
+from conflict_detector import cluster_conflicts
+
 
 def write_to_json(
     conflicts_by_repo: dict,
@@ -22,42 +24,65 @@ def write_to_json(
     total_conflicts_found = 0
 
     for repo_name, conflicts in conflicts_by_repo.items():
-        repo_conflicts = []
-        for conflict in conflicts:
-            conflicting_files = [
+        clusters = cluster_conflicts(conflicts)
+
+        cluster_data = []
+        for cluster in clusters:
+            cluster_prs = [
                 {
-                    "filename": fo.filename,
-                    "overlapping_ranges": list(fo.overlapping_ranges),
+                    "number": pr.number,
+                    "title": pr.title,
+                    "author": pr.author,
+                    "url": pr.url,
                 }
-                for fo in conflict.conflicting_files
+                for pr in cluster.prs
             ]
-            repo_conflicts.append(
+            cluster_pair_list = []
+            for conflict in cluster.conflicts:
+                conflicting_files = [
+                    {
+                        "filename": fo.filename,
+                        "overlapping_ranges": list(fo.overlapping_ranges),
+                    }
+                    for fo in conflict.conflicting_files
+                ]
+                cluster_pair_list.append(
+                    {
+                        "pr_a": {
+                            "number": conflict.pr_a.number,
+                            "title": conflict.pr_a.title,
+                            "author": conflict.pr_a.author,
+                            "url": conflict.pr_a.url,
+                        },
+                        "pr_b": {
+                            "number": conflict.pr_b.number,
+                            "title": conflict.pr_b.title,
+                            "author": conflict.pr_b.author,
+                            "url": conflict.pr_b.url,
+                        },
+                        "conflicting_files": conflicting_files,
+                        "verified": (
+                            conflict.verified
+                            if hasattr(conflict, "verified")
+                            else False
+                        ),
+                    }
+                )
+
+            cluster_data.append(
                 {
-                    "pr_a": {
-                        "number": conflict.pr_a.number,
-                        "title": conflict.pr_a.title,
-                        "author": conflict.pr_a.author,
-                        "url": conflict.pr_a.url,
-                    },
-                    "pr_b": {
-                        "number": conflict.pr_b.number,
-                        "title": conflict.pr_b.title,
-                        "author": conflict.pr_b.author,
-                        "url": conflict.pr_b.url,
-                    },
-                    "conflicting_files": conflicting_files,
-                    "verified": (
-                        conflict.verified if hasattr(conflict, "verified") else False
-                    ),
+                    "prs": cluster_prs,
+                    "shared_files": cluster.shared_files,
+                    "conflicts": cluster_pair_list,
                 }
             )
 
-        total_conflicts_found += len(repo_conflicts)
+        total_conflicts_found += len(conflicts)
         repositories.append(
             {
                 "name": repo_name,
-                "conflicts": repo_conflicts,
-                "total_conflicts": len(repo_conflicts),
+                "clusters": cluster_data,
+                "total_conflicts": len(conflicts),
             }
         )
 
