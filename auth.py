@@ -2,6 +2,38 @@
 
 import github3
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+# Retry strategy: 5 retries with exponential backoff for transient errors
+RETRY_STRATEGY = Retry(
+    total=5,
+    backoff_factor=1,  # 1s, 2s, 4s, 8s, 16s
+    status_forcelist=[429, 500, 502, 503, 504],
+    raise_on_status=False,
+)
+REQUEST_TIMEOUT = 30  # seconds
+
+
+def _configure_session(github_connection: github3.GitHub) -> None:
+    """Mount retry adapter and set timeout on the github3 session."""
+    session = getattr(github_connection, "session", None)
+    if session is None:
+        return
+    adapter = HTTPAdapter(max_retries=RETRY_STRATEGY)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    session.request = _timeout_wrapper(session.request, REQUEST_TIMEOUT)  # type: ignore[method-assign]
+
+
+def _timeout_wrapper(original_request, default_timeout):
+    """Wrap a session.request method to inject a default timeout."""
+
+    def wrapper(*args, **kwargs):
+        kwargs.setdefault("timeout", default_timeout)
+        return original_request(*args, **kwargs)
+
+    return wrapper
 
 
 def auth_to_github(
@@ -46,6 +78,7 @@ def auth_to_github(
 
     if not github_connection:
         raise ValueError("Unable to authenticate to GitHub")
+    _configure_session(github_connection)
     return github_connection  # type: ignore
 
 

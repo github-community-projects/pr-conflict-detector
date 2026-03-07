@@ -125,6 +125,43 @@ class TestAuth(unittest.TestCase):
             "Unable to authenticate to GitHub",
         )
 
+    @patch("github3.login")
+    def test_auth_configures_retry_session(self, mock_login):
+        """Test that auth configures retry adapter and timeout on the session."""
+        mock_gh = MagicMock()
+        mock_session = MagicMock()
+        mock_gh.session = mock_session
+        mock_login.return_value = mock_gh
+
+        result = auth.auth_to_github("token", "", "", b"", "", False)
+
+        self.assertEqual(result, mock_gh)
+        # Retry adapter should be mounted
+        mock_session.mount.assert_any_call("https://", unittest.mock.ANY)
+        mock_session.mount.assert_any_call("http://", unittest.mock.ANY)
+
+    def test_timeout_wrapper_injects_default(self):
+        """Test that the timeout wrapper injects a default timeout."""
+        original = MagicMock(return_value="response")
+        wrapped = auth._timeout_wrapper(
+            original, 30
+        )  # pylint: disable=protected-access
+
+        wrapped("GET", "https://api.github.com")
+
+        original.assert_called_once_with("GET", "https://api.github.com", timeout=30)
+
+    def test_timeout_wrapper_respects_explicit_timeout(self):
+        """Test that an explicit timeout is not overridden."""
+        original = MagicMock(return_value="response")
+        wrapped = auth._timeout_wrapper(
+            original, 30
+        )  # pylint: disable=protected-access
+
+        wrapped("GET", "https://api.github.com", timeout=60)
+
+        original.assert_called_once_with("GET", "https://api.github.com", timeout=60)
+
 
 if __name__ == "__main__":
     unittest.main()
