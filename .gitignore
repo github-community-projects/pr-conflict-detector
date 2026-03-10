@@ -40,3 +40,4 @@ venv/
 
 pr_conflict_report.json
 pr_conflict_report.md
+.pr-conflict-state.json

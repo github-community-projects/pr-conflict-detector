@@ -6,10 +6,13 @@ from unittest.mock import MagicMock, patch
 
 import requests
 import slack_notify
+from conflict_detector import ConflictCluster
 
 # Lightweight stand-ins for conflict_detector types used by slack_notify
-FileOverlap = namedtuple("FileOverlap", ["filename"])
-PRInfo = namedtuple("PRInfo", ["number", "url", "author"])
+FileOverlap = namedtuple(
+    "FileOverlap", ["filename", "pr_a_lines", "pr_b_lines", "overlapping_ranges"]
+)
+PRInfo = namedtuple("PRInfo", ["number", "url", "title", "author"])
 ConflictResult = namedtuple(
     "ConflictResult",
     [
@@ -23,17 +26,31 @@ ConflictResult = namedtuple(
 def _make_conflict(
     pr_a_number=1,
     pr_a_url="https://github.com/org/repo/pull/1",
+    pr_a_title="Fix auth",
     pr_a_author="alice",
     pr_b_number=2,
     pr_b_url="https://github.com/org/repo/pull/2",
+    pr_b_title="Add tests",
     pr_b_author="bob",
     filenames=None,
 ):
     """Helper to build a ConflictResult with sensible defaults."""
-    files = [FileOverlap(f) for f in (filenames or ["README.md"])]
+    files = [
+        FileOverlap(
+            filename=f,
+            pr_a_lines=[(10, 20)],
+            pr_b_lines=[(15, 25)],
+            overlapping_ranges=[(15, 20)],
+        )
+        for f in (filenames or ["README.md"])
+    ]
     return ConflictResult(
-        pr_a=PRInfo(number=pr_a_number, url=pr_a_url, author=pr_a_author),
-        pr_b=PRInfo(number=pr_b_number, url=pr_b_url, author=pr_b_author),
+        pr_a=PRInfo(
+            number=pr_a_number, url=pr_a_url, title=pr_a_title, author=pr_a_author
+        ),
+        pr_b=PRInfo(
+            number=pr_b_number, url=pr_b_url, title=pr_b_title, author=pr_b_author
+        ),
         conflicting_files=files,
     )
 
@@ -43,22 +60,35 @@ class TestSendSlackNotification(unittest.TestCase):
 
     @patch("slack_notify.post_to_slack", return_value=True)
     def test_send_slack_notification_success(self, mock_post):
-        """Happy path: webhook URL present, message is built and sent."""
+        """Happy path: webhook URL present, messages are sent (one per conflict)."""
         conflicts = {"org/repo": [_make_conflict()]}
         result = slack_notify.send_slack_notification(
             "https://hooks.slack.com/test", conflicts
         )
         self.assertTrue(result)
-        mock_post.assert_called_once()
-        # Verify the message dict was passed
-        _, args, _ = mock_post.mock_calls[0]
-        self.assertIn("blocks", args[1])
+        # Should send one message per conflict (1 conflict = 1 call)
+        self.assertEqual(mock_post.call_count, 1)
 
     def test_send_slack_notification_no_webhook(self):
         """Missing webhook URL should return False without attempting to send."""
         conflicts = {"org/repo": [_make_conflict()]}
         result = slack_notify.send_slack_notification("", conflicts)
         self.assertFalse(result)
+
+    def test_send_slack_notification_no_conflicts(self):
+        """Empty conflicts should return True without sending."""
+        result = slack_notify.send_slack_notification(
+            "https://hooks.slack.com/test", {}
+        )
+        self.assertTrue(result)
+
+    def test_send_slack_notification_empty_conflict_lists(self):
+        """Repos with empty conflict lists should be skipped."""
+        conflicts = {"org/repo": []}
+        result = slack_notify.send_slack_notification(
+            "https://hooks.slack.com/test", conflicts
+        )
+        self.assertTrue(result)
 
     @patch("slack_notify.post_to_slack")
     def test_send_slack_notification_dry_run(self, mock_post):
@@ -70,125 +100,100 @@ class TestSendSlackNotification(unittest.TestCase):
         self.assertTrue(result)
         mock_post.assert_not_called()
 
-
-class TestBuildSlackMessage(unittest.TestCase):
-    """Tests for the build_slack_message function."""
-
-    def test_build_slack_message_with_conflicts(self):
-        """Message with conflicts should include a header and per-conflict blocks."""
-        conflict = _make_conflict(filenames=["src/app.py", "README.md"])
-        message = slack_notify.build_slack_message({"org/repo": [conflict]})
-
-        blocks = message["blocks"]
-        # Header block
-        self.assertEqual(blocks[0]["type"], "header")
-        self.assertIn("1 potential conflict(s)", blocks[0]["text"]["text"])
-
-        # Repo section
-        repo_block = blocks[2]
-        self.assertIn("org/repo", repo_block["text"]["text"])
-
-        # Conflict detail block should mention both files
-        detail_block = blocks[3]
-        self.assertIn("`src/app.py`", detail_block["text"]["text"])
-        self.assertIn("`README.md`", detail_block["text"]["text"])
-
-    def test_build_slack_message_no_conflicts(self):
-        """Empty conflict dict should produce a success message."""
-        message = slack_notify.build_slack_message({})
-
-        blocks = message["blocks"]
-        self.assertEqual(len(blocks), 1)
-        self.assertIn(
-            "No potential merge conflicts detected!", blocks[0]["text"]["text"]
+    @patch("slack_notify.post_to_slack", return_value=False)
+    def test_send_slack_notification_failure(self, _mock_post):
+        """If posting fails, should return False."""
+        conflicts = {"org/repo": [_make_conflict()]}
+        result = slack_notify.send_slack_notification(
+            "https://hooks.slack.com/test", conflicts
         )
+        self.assertFalse(result)
 
-    def test_build_slack_message_skips_empty_conflict_list(self):
-        """Test that repos with empty conflict lists are skipped."""
-        conflicts_by_repo = {
-            "org/empty-repo": [],
-            "org/real-repo": [_make_conflict()],
-        }
-        message = slack_notify.build_slack_message(conflicts_by_repo)
-        all_text = " ".join(
-            b.get("text", {}).get("text", "") for b in message["blocks"] if "text" in b
+
+class TestBuildClusterMessage(unittest.TestCase):
+    """Tests for the build_cluster_message function."""
+
+    def test_build_cluster_message_simple_pair(self):
+        """Message for a 2-PR cluster should show both PRs with file details."""
+        conflict = _make_conflict(filenames=["src/app.py"])
+        cluster = ConflictCluster(
+            prs=[conflict.pr_a, conflict.pr_b],
+            shared_files=["src/app.py"],
+            conflicts=[conflict],
         )
-        self.assertNotIn("org/empty-repo", all_text)
-        self.assertIn("org/real-repo", all_text)
+        message = slack_notify.build_cluster_message("org/repo", cluster)
 
-    def test_build_slack_message_multiple_repos(self):
-        """Multiple repos each get their own section."""
-        conflicts = {
-            "org/alpha": [_make_conflict(pr_a_number=10, pr_b_number=11)],
-            "org/beta": [
-                _make_conflict(pr_a_number=20, pr_b_number=21),
-                _make_conflict(
-                    pr_a_number=22,
-                    pr_b_number=23,
-                    filenames=["docs/index.md"],
-                ),
-            ],
-        }
-        message = slack_notify.build_slack_message(conflicts)
+        self.assertIn("text", message)
+        text = message["text"]
+        self.assertIn("<@alice>", text)
+        self.assertIn("<@bob>", text)
+        self.assertIn("#1", text)
+        self.assertIn("#2", text)
+        self.assertIn("src/app.py", text)
 
-        blocks = message["blocks"]
-        # Header should report total of 3 conflicts
-        self.assertIn("3 potential conflict(s)", blocks[0]["text"]["text"])
+    def test_build_cluster_message_multi_pr_cluster(self):
+        """Message for 3+ PR cluster should show all PRs and shared files."""
+        pr1 = PRInfo(1, "http://pr1", "PR 1", "alice")
+        pr2 = PRInfo(2, "http://pr2", "PR 2", "bob")
+        pr3 = PRInfo(3, "http://pr3", "PR 3", "charlie")
 
-        # Both repo names should appear somewhere in the blocks
-        all_text = " ".join(
-            b.get("text", {}).get("text", "") for b in blocks if "text" in b
+        cluster = ConflictCluster(
+            prs=[pr1, pr2, pr3],
+            shared_files=["main.py", "test.py"],
+            conflicts=[],  # Not used in multi-PR rendering
         )
-        self.assertIn("org/alpha", all_text)
-        self.assertIn("org/beta", all_text)
+        message = slack_notify.build_cluster_message("org/repo", cluster)
 
-    def test_build_slack_message_cluster(self):
-        """Multi-PR cluster should render with cluster summary."""
-        # 3 PRs all conflicting → 1 cluster
-        c12 = _make_conflict(pr_a_number=1, pr_b_number=2)
-        c13 = _make_conflict(pr_a_number=1, pr_b_number=3)
-        c23 = _make_conflict(pr_a_number=2, pr_b_number=3)
-
-        conflicts = {"org/repo": [c12, c13, c23]}
-        message = slack_notify.build_slack_message(conflicts)
-
-        all_text = " ".join(
-            b.get("text", {}).get("text", "") for b in message["blocks"] if "text" in b
-        )
-        self.assertIn("Cluster", all_text)
-        self.assertIn("3 PRs", all_text)
+        self.assertIn("text", message)
+        text = message["text"]
+        self.assertIn("<@alice>", text)
+        self.assertIn("<@bob>", text)
+        self.assertIn("<@charlie>", text)
+        self.assertIn("3 PRs", text)
+        self.assertIn("main.py", text)
+        self.assertIn("test.py", text)
 
 
 class TestPostToSlack(unittest.TestCase):
-    """Tests for the post_to_slack function."""
+    """Tests for the low-level post_to_slack function."""
 
-    @patch("slack_notify.requests.post")
-    def test_post_to_slack_with_channel(self, mock_post):
-        """Channel override should be injected into the payload."""
+    @patch("requests.post")
+    def test_post_to_slack_success(self, mock_requests_post):
+        """Successful POST to webhook URL should return True."""
         mock_response = MagicMock()
-        mock_response.raise_for_status.return_value = None
-        mock_post.return_value = mock_response
+        mock_response.raise_for_status = MagicMock()
+        mock_requests_post.return_value = mock_response
 
-        message = {"blocks": []}
         result = slack_notify.post_to_slack(
-            "https://hooks.slack.com/test", message, channel="#alerts"
+            "https://hooks.slack.com/test", {"text": "hello"}
         )
-
         self.assertTrue(result)
-        # The message dict should now contain the channel key
-        self.assertEqual(message["channel"], "#alerts")
-        mock_post.assert_called_once()
+        mock_requests_post.assert_called_once()
 
-    @patch("slack_notify.requests.post")
-    def test_post_to_slack_failure(self, mock_post):
-        """A RequestException should be caught and return False."""
-        mock_post.side_effect = requests.exceptions.RequestException("timeout")
-
+    @patch("requests.post")
+    def test_post_to_slack_failure(self, mock_requests_post):
+        """Failed POST should return False."""
+        mock_requests_post.side_effect = requests.RequestException("Network error")
         result = slack_notify.post_to_slack(
-            "https://hooks.slack.com/test", {"blocks": []}
+            "https://hooks.slack.com/test", {"text": "hello"}
+        )
+        self.assertFalse(result)
+
+    @patch("requests.post")
+    def test_post_to_slack_with_channel_override(self, mock_requests_post):
+        """Channel override should be added to the message payload."""
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_requests_post.return_value = mock_response
+
+        slack_notify.post_to_slack(
+            "https://hooks.slack.com/test", {"text": "hello"}, channel="#general"
         )
 
-        self.assertFalse(result)
+        # Check the message dict passed to requests.post includes the channel
+        call_args = mock_requests_post.call_args
+        self.assertIn("json", call_args.kwargs)
+        self.assertEqual(call_args.kwargs["json"]["channel"], "#general")
 
 
 if __name__ == "__main__":

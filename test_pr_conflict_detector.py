@@ -8,6 +8,26 @@ from pr_conflict_detector import get_repos_iterator, main
 from pr_data import PullRequestData
 
 
+# Mock deduplication module for all tests
+@patch("pr_conflict_detector.deduplication")
+class _BaseIntegrationTest:
+    """Base class that mocks deduplication for integration tests."""
+
+    def setup_dedup_mock(self, mock_dedup, conflicts):
+        """Configure deduplication mock to pass through all conflicts as new."""
+        mock_dedup.load_state.return_value = {"conflicts": []}
+        mock_dedup.prune_expired_conflicts.return_value = {"conflicts": []}
+
+        dedup_result = MagicMock()
+        dedup_result.new_conflicts = conflicts
+        dedup_result.changed_conflicts = []
+        dedup_result.unchanged_conflicts = []
+        dedup_result.resolved_fingerprints = []
+        mock_dedup.compare_conflicts.return_value = dedup_result
+
+        mock_dedup.update_state_with_current.return_value = {"conflicts": []}
+
+
 def _make_env_vars(**overrides):
     """Build an EnvVars dataclass with sensible defaults, allowing overrides."""
     defaults = {
@@ -58,6 +78,33 @@ def _make_pr(number, title="PR title", author="dev"):
     )
 
 
+def _mock_dedup_passthrough():
+    """Create a mock deduplication module that passes conflicts through."""
+    mock = MagicMock()
+    mock.load_state.return_value = {"conflicts": []}
+    mock.prune_expired_conflicts.return_value = {"conflicts": []}
+
+    def compare_conflicts_side_effect(
+        current_conflicts, state
+    ):  # pylint: disable=unused-argument
+        """Return all conflicts as new."""
+        result = MagicMock()
+        # Flatten dict of conflicts to a single list
+        all_conf_list = []
+        for conflicts in current_conflicts.values():
+            all_conf_list.extend(conflicts)
+        result.new_conflicts = all_conf_list
+        result.changed_conflicts = []
+        result.unchanged_conflicts = []
+        result.resolved_fingerprints = []
+        return result
+
+    mock.compare_conflicts.side_effect = compare_conflicts_side_effect
+    mock.update_state_with_current.return_value = {"conflicts": []}
+    mock.save_state.return_value = None
+    return mock
+
+
 class TestGetReposIteratorOrg(unittest.TestCase):
     """Test get_repos_iterator when an organization is provided."""
 
@@ -98,6 +145,7 @@ class TestGetReposIteratorRepoList(unittest.TestCase):
         self.assertEqual(result, [repo_a, repo_b])
 
 
+@patch("pr_conflict_detector.deduplication", new=_mock_dedup_passthrough())
 @patch("pr_conflict_detector.send_slack_notification")
 @patch("pr_conflict_detector.create_or_update_issue")
 @patch("pr_conflict_detector.write_to_json")
@@ -155,6 +203,7 @@ class TestMainWithOrganization(unittest.TestCase):
         mock_slack.assert_called_once()
 
 
+@patch("pr_conflict_detector.deduplication", new=_mock_dedup_passthrough())
 @patch("pr_conflict_detector.send_slack_notification")
 @patch("pr_conflict_detector.create_or_update_issue")
 @patch("pr_conflict_detector.write_to_json")
@@ -202,6 +251,7 @@ class TestMainWithRepositoryList(unittest.TestCase):
         mock_issue.assert_not_called()
 
 
+@patch("pr_conflict_detector.deduplication", new=_mock_dedup_passthrough())
 @patch("pr_conflict_detector.send_slack_notification")
 @patch("pr_conflict_detector.create_or_update_issue")
 @patch("pr_conflict_detector.write_to_json")
@@ -247,6 +297,7 @@ class TestSkipsExemptRepos(unittest.TestCase):
         )
 
 
+@patch("pr_conflict_detector.deduplication", new=_mock_dedup_passthrough())
 @patch("pr_conflict_detector.send_slack_notification")
 @patch("pr_conflict_detector.create_or_update_issue")
 @patch("pr_conflict_detector.write_to_json")
@@ -289,6 +340,7 @@ class TestSkipsArchivedRepos(unittest.TestCase):
         mock_fetch.assert_called_once_with(active, True, gh, "test-org", "active-repo")
 
 
+@patch("pr_conflict_detector.deduplication", new=_mock_dedup_passthrough())
 @patch("pr_conflict_detector.send_slack_notification")
 @patch("pr_conflict_detector.create_or_update_issue")
 @patch("pr_conflict_detector.write_to_json")
@@ -330,6 +382,7 @@ class TestSkipsReposWithFewerThan2PRs(unittest.TestCase):
         mock_detect.assert_not_called()
 
 
+@patch("pr_conflict_detector.deduplication", new=_mock_dedup_passthrough())
 @patch("pr_conflict_detector.send_slack_notification")
 @patch("pr_conflict_detector.create_or_update_issue")
 @patch("pr_conflict_detector.write_to_json")
@@ -373,6 +426,7 @@ class TestDryRunSkipsIssues(unittest.TestCase):
         mock_issue.assert_not_called()
 
 
+@patch("pr_conflict_detector.deduplication", new=_mock_dedup_passthrough())
 @patch("pr_conflict_detector.send_slack_notification")
 @patch("pr_conflict_detector.create_or_update_issue")
 @patch("pr_conflict_detector.write_to_json")
@@ -421,6 +475,7 @@ class TestExemptPRsFiltered(unittest.TestCase):
         self.assertIn(pr3, detected_prs)
 
 
+@patch("pr_conflict_detector.deduplication", new=_mock_dedup_passthrough())
 @patch("pr_conflict_detector.send_slack_notification")
 @patch("pr_conflict_detector.create_or_update_issue")
 @patch("pr_conflict_detector.write_to_json")

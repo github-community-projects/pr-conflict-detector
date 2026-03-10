@@ -4,6 +4,7 @@ by analyzing overlapping file and line changes across repositories.
 """
 
 import auth
+import deduplication
 import env
 from conflict_detector import detect_conflicts
 from issue_writer import create_or_update_issue
@@ -88,12 +89,42 @@ def main():
         else:
             print("  ✅ No conflicts detected")
 
-    # 5. Generate outputs
+    # 5. Apply deduplication
     print(f"\n{'='*50}")
     total = sum(len(c) for c in all_conflicts.values())
     print(f"Total: {total} potential conflict(s) across {len(all_conflicts)} repo(s)")
 
-    # Write markdown report
+    # Load and prune state
+    state = deduplication.load_state()
+    state = deduplication.prune_expired_conflicts(state)
+
+    # Compare current vs historical
+    dedup_result = deduplication.compare_conflicts(all_conflicts, state)
+
+    print(
+        f"Deduplication: {len(dedup_result.new_conflicts)} new, "
+        f"{len(dedup_result.changed_conflicts)} changed, "
+        f"{len(dedup_result.unchanged_conflicts)} unchanged, "
+        f"{len(dedup_result.resolved_fingerprints)} resolved"
+    )
+
+    # Update state with current conflicts
+    updated_state = deduplication.update_state_with_current(all_conflicts, state)
+    deduplication.save_state(updated_state)
+
+    # Conflicts to notify about (new + changed)
+    notify_conflicts: dict[str, list] = {}
+    for conflict in dedup_result.new_conflicts + dedup_result.changed_conflicts:
+        # Find which repo this conflict belongs to
+        for repo_name, conflicts in all_conflicts.items():
+            if conflict in conflicts:
+                if repo_name not in notify_conflicts:
+                    notify_conflicts[repo_name] = []
+                notify_conflicts[repo_name].append(conflict)
+                break
+
+    # 6. Generate outputs
+    # Write markdown report (always generated, full results)
     write_to_markdown(
         all_conflicts,
         output_file=env_vars.output_file,
@@ -105,7 +136,7 @@ def main():
     json_output = env_vars.output_file.replace(".md", ".json")
     write_to_json(all_conflicts, output_file=json_output)
 
-    # Create/update issues in repos
+    # Create/update issues in repos (all conflicts, not just new)
     if not env_vars.dry_run:
         for repo_full_name, conflicts in all_conflicts.items():
             owner, rname = repo_full_name.split("/")
@@ -118,13 +149,19 @@ def main():
     else:
         print("DRY RUN: Skipping issue creation")
 
-    # Send Slack notification
-    send_slack_notification(
-        env_vars.slack_webhook_url,
-        all_conflicts,
-        channel=env_vars.slack_channel,
-        dry_run=env_vars.dry_run,
-    )
+    # Send Slack notification (only for new + changed conflicts)
+    if notify_conflicts:
+        print(
+            f"Sending Slack notifications for {sum(len(c) for c in notify_conflicts.values())} conflict(s)"
+        )
+        send_slack_notification(
+            env_vars.slack_webhook_url,
+            notify_conflicts,
+            channel=env_vars.slack_channel,
+            dry_run=env_vars.dry_run,
+        )
+    else:
+        print("No new or changed conflicts — skipping Slack notifications")
 
 
 def get_repos_iterator(github_connection, env_vars):
