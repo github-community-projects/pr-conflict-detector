@@ -569,5 +569,70 @@ class TestFilterAuthors(unittest.TestCase):
         mock_detect.assert_not_called()
 
 
+@patch("pr_conflict_detector.deduplication", new=_mock_dedup_passthrough())
+@patch("pr_conflict_detector.send_slack_notification")
+@patch("pr_conflict_detector.create_or_update_issue")
+@patch("pr_conflict_detector.write_to_json")
+@patch("pr_conflict_detector.write_to_markdown")
+@patch("pr_conflict_detector.detect_conflicts")
+@patch("pr_conflict_detector.fetch_all_pr_data")
+@patch("pr_conflict_detector.auth.auth_to_github")
+@patch("pr_conflict_detector.env.get_env_vars")
+class TestSameAuthorConflictsFiltered(unittest.TestCase):
+    """Test that conflicts between PRs by the same author are filtered out."""
+
+    def test_same_author_conflicts_filtered(
+        self,
+        mock_get_env,
+        mock_auth,
+        mock_fetch,
+        mock_detect,
+        _mock_md,
+        _mock_json,
+        _mock_issue,
+        _mock_slack,
+    ):
+        """Verify conflicts where pr_a.author == pr_b.author are filtered out."""
+        repo = _make_repo("test-org/repo-a")
+        env_vars = _make_env_vars()
+        mock_get_env.return_value = env_vars
+
+        gh = MagicMock()
+        mock_auth.return_value = gh
+        org_mock = MagicMock()
+        org_mock.repositories.return_value = [repo]
+        gh.organization.return_value = org_mock
+
+        pr1 = _make_pr(1, author="alice")
+        pr2 = _make_pr(2, author="alice")
+        pr3 = _make_pr(3, author="bob")
+        mock_fetch.return_value = [pr1, pr2, pr3]
+
+        # Create conflicts: alice vs alice (should be filtered), alice vs bob (should stay)
+        same_author_conflict = MagicMock()
+        same_author_conflict.pr_a.author = "alice"
+        same_author_conflict.pr_b.author = "alice"
+
+        diff_author_conflict = MagicMock()
+        diff_author_conflict.pr_a.author = "alice"
+        diff_author_conflict.pr_b.author = "bob"
+
+        mock_detect.return_value = [same_author_conflict, diff_author_conflict]
+
+        main()
+
+        mock_detect.assert_called_once()
+        # Markdown writer should only get the diff-author conflict
+        mock_write_md = _mock_md
+        self.assertTrue(mock_write_md.called)
+        written_conflicts = mock_write_md.call_args[0][0]
+        self.assertEqual(len(written_conflicts["test-org/repo-a"]), 1)
+        self.assertEqual(written_conflicts["test-org/repo-a"][0], diff_author_conflict)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
 if __name__ == "__main__":
     unittest.main()

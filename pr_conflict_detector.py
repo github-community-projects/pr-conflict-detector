@@ -83,6 +83,17 @@ def main():
             repo_name=repo_name,
         )
 
+        # Filter out conflicts where both PRs have the same author
+        if conflicts:
+            original_count = len(conflicts)
+            conflicts = [c for c in conflicts if c.pr_a.author != c.pr_b.author]
+            filtered_count = original_count - len(conflicts)
+            if filtered_count > 0:
+                print(
+                    f"  Filtered {filtered_count} same-author conflict(s) "
+                    f"({len(conflicts)} remaining)"
+                )
+
         if conflicts:
             all_conflicts[repo.full_name] = conflicts
             print(f"  ⚠️  Found {len(conflicts)} potential conflict(s)")
