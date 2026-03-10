@@ -1,0 +1,37 @@
+{
+  "conflicts": [
+    {
+      "repo": "github/github",
+      "pr_a": 421107,
+      "pr_b": 421567,
+      "files": [
+        "packages/pull_requests/app/models/pull_request_copilot_attribution.rb",
+        "packages/pull_requests/test/models/pull_request_copilot_attribution_test.rb"
+      ],
+      "first_seen": "2026-03-10T08:09:59.300684+00:00"
+    },
+    {
+      "repo": "github/github-ui",
+      "pr_a": 14295,
+      "pr_b": 14297,
+      "files": [
+        "packages/filter-core/__tests__/providers/assignee.browser.test.ts",
+        "packages/filter-core/__tests__/providers/author.browser.test.ts",
+        "packages/filter-core/__tests__/providers/involves.browser.test.ts",
+        "packages/filter-core/__tests__/providers/review-requested.browser.test.ts",
+        "packages/filter-core/__tests__/providers/reviewed-by.browser.test.ts",
+        "packages/filter-core/providers/user.ts"
+      ],
+      "first_seen": "2026-03-10T08:09:59.300713+00:00"
+    },
+    {
+      "repo": "github/github-ui",
+      "pr_a": 15267,
+      "pr_b": 15499,
+      "files": [
+        "packages/dashboard-surface/routes/PullsDashboardInbox.tsx"
+      ],
+      "first_seen": "2026-03-10T08:09:59.300721+00:00"
+    }
+  ]
+}

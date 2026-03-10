@@ -108,9 +108,12 @@ def main():
         f"{len(dedup_result.resolved_fingerprints)} resolved"
     )
 
-    # Update state with current conflicts
+    # Update state with current conflicts (skip saving in dry run)
     updated_state = deduplication.update_state_with_current(all_conflicts, state)
-    deduplication.save_state(updated_state)
+    if not env_vars.dry_run:
+        deduplication.save_state(updated_state)
+    else:
+        print("DRY RUN: Skipping state file save")
 
     # Conflicts to notify about (new + changed)
     notify_conflicts: dict[str, list] = {}

@@ -382,7 +382,7 @@ class TestSkipsReposWithFewerThan2PRs(unittest.TestCase):
         mock_detect.assert_not_called()
 
 
-@patch("pr_conflict_detector.deduplication", new=_mock_dedup_passthrough())
+@patch("pr_conflict_detector.deduplication")
 @patch("pr_conflict_detector.send_slack_notification")
 @patch("pr_conflict_detector.create_or_update_issue")
 @patch("pr_conflict_detector.write_to_json")
@@ -392,7 +392,7 @@ class TestSkipsReposWithFewerThan2PRs(unittest.TestCase):
 @patch("pr_conflict_detector.auth.auth_to_github")
 @patch("pr_conflict_detector.env.get_env_vars")
 class TestDryRunSkipsIssues(unittest.TestCase):
-    """Test that dry_run mode skips issue creation."""
+    """Test that dry_run mode skips issue creation and state saving."""
 
     def test_dry_run_skips_issues(
         self,
@@ -404,11 +404,23 @@ class TestDryRunSkipsIssues(unittest.TestCase):
         _mock_json,
         mock_issue,
         _mock_slack,
+        mock_dedup,
     ):
-        """Verify that dry_run mode skips issue creation."""
+        """Verify that dry_run mode skips issue creation and state file saving."""
         repo = _make_repo("test-org/repo-a")
         env_vars = _make_env_vars(dry_run=True)
         mock_get_env.return_value = env_vars
+
+        # Setup deduplication mock
+        mock_dedup.load_state.return_value = {"conflicts": []}
+        mock_dedup.prune_expired_conflicts.return_value = {"conflicts": []}
+        dedup_result = MagicMock()
+        dedup_result.new_conflicts = [MagicMock()]
+        dedup_result.changed_conflicts = []
+        dedup_result.unchanged_conflicts = []
+        dedup_result.resolved_fingerprints = []
+        mock_dedup.compare_conflicts.return_value = dedup_result
+        mock_dedup.update_state_with_current.return_value = {"conflicts": []}
 
         gh = MagicMock()
         mock_auth.return_value = gh
@@ -424,6 +436,8 @@ class TestDryRunSkipsIssues(unittest.TestCase):
         mock_detect.assert_called_once()
         # Issue creation is skipped in dry_run mode
         mock_issue.assert_not_called()
+        # State file saving is skipped in dry_run mode
+        mock_dedup.save_state.assert_not_called()
 
 
 @patch("pr_conflict_detector.deduplication", new=_mock_dedup_passthrough())
