@@ -50,6 +50,7 @@ def _make_env_vars(**overrides):
         "slack_channel": "",
         "enable_github_actions_step_summary": False,
         "filter_authors": [],
+        "enable_pr_comments": False,
     }
     defaults.update(overrides)
     return EnvVars(**defaults)

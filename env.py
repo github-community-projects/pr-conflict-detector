@@ -32,6 +32,7 @@ class EnvVars:  # pylint: disable=too-many-instance-attributes
     slack_channel: str
     enable_github_actions_step_summary: bool
     filter_authors: list[str]
+    enable_pr_comments: bool
 
 
 def get_bool_env_var(env_var_name: str, default: bool = False) -> bool:
@@ -167,6 +168,8 @@ def get_env_vars(test: bool = False) -> EnvVars:
             if author.strip()
         ]
 
+    enable_pr_comments = get_bool_env_var("ENABLE_PR_COMMENTS")
+
     return EnvVars(
         gh_app_id=gh_app_id,
         gh_app_installation_id=gh_app_installation_id,
@@ -187,4 +190,5 @@ def get_env_vars(test: bool = False) -> EnvVars:
         slack_channel=slack_channel,
         enable_github_actions_step_summary=enable_github_actions_step_summary,
         filter_authors=filter_authors,
+        enable_pr_comments=enable_pr_comments,
     )

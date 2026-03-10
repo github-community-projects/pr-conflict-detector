@@ -10,6 +10,7 @@ from conflict_detector import detect_conflicts
 from issue_writer import create_or_update_issue
 from json_writer import write_to_json
 from markdown_writer import write_to_markdown
+from pr_comment import post_pr_comments
 from pr_data import fetch_all_pr_data
 from slack_notify import send_slack_notification
 
@@ -176,6 +177,19 @@ def main():
         )
     else:
         print("No new or changed conflicts — skipping Slack notifications")
+
+    # Post PR comments (only for new + changed conflicts)
+    if env_vars.enable_pr_comments and notify_conflicts:
+        print(
+            f"Posting PR comments for {sum(len(c) for c in notify_conflicts.values())} conflict(s)"
+        )
+        post_pr_comments(
+            notify_conflicts,
+            github_connection,
+            dry_run=env_vars.dry_run,
+        )
+    elif env_vars.enable_pr_comments:
+        print("No new or changed conflicts — skipping PR comments")
 
 
 def get_repos_iterator(github_connection, env_vars):

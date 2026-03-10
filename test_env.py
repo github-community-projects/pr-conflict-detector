@@ -75,6 +75,7 @@ class TestEnv(unittest.TestCase):
             slack_webhook_url="https://hooks.slack.com/test",
             slack_channel="#alerts",
             enable_github_actions_step_summary=False,
+            enable_pr_comments=False,
             filter_authors=[],
         )
         result = get_env_vars(True)
@@ -110,6 +111,7 @@ class TestEnv(unittest.TestCase):
             slack_channel="",
             enable_github_actions_step_summary=True,
             filter_authors=[],
+            enable_pr_comments=False,
         )
         result = get_env_vars(True)
         self.assertEqual(result, expected_result)
@@ -144,6 +146,7 @@ class TestEnv(unittest.TestCase):
             slack_channel="",
             enable_github_actions_step_summary=True,
             filter_authors=[],
+            enable_pr_comments=False,
         )
         result = get_env_vars(True)
         self.assertEqual(result, expected_result)
