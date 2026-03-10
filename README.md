@@ -18,7 +18,8 @@ This action, developed by GitHub OSPO for our internal use, is open-sourced for 
 6. **Optionally verifies conflicts** using GitHub's merge simulation API
 7. **Generates reports** in Markdown and JSON format
 8. **Opens issues** in affected repositories to notify teams
-9. **Sends targeted Slack notifications** - One message per conflict with @mentions for affected authors
+9. **Posts PR comments** - Optionally comments directly on conflicting PRs with details
+10. **Sends targeted Slack notifications** - One message per conflict with @mentions for affected authors
 
 ## Example use cases
 
@@ -96,13 +97,14 @@ The required GitHub App permissions under `Repository permissions` are:
 | `VERIFY_CONFLICTS`                     | False    | `false`                  | If set to `true`, enables merge simulation verification using GitHub's API. Provides higher confidence results but requires additional API calls.                                                         |
 | `EXEMPT_REPOS`                         | False    | `""`                     | A comma-separated list of repositories to exclude from scanning. Example: `owner/repo-to-skip,owner/another-repo`                                                                                        |
 | `EXEMPT_PRS`                           | False    | `""`                     | A comma-separated list of PR numbers to exclude from conflict analysis. Example: `123,456,789`                                                                                                           |
-| `DRY_RUN`                              | False    | `false`                  | If set to `true`, the action will generate reports but skip issue creation, Slack notifications, and state file modifications. Useful for testing.                                                        |
+| `DRY_RUN`                              | False    | `false`                  | If set to `true`, the action will generate reports but skip issue creation, Slack notifications, PR comments, and state file modifications. Useful for testing.                                           |
 | `REPORT_TITLE`                         | False    | `PR Conflict Report`     | The title used for the generated conflict report and any issues created.                                                                                                                                 |
 | `OUTPUT_FILE`                          | False    | `pr_conflict_report.md`  | The filename for the generated Markdown report.                                                                                                                                                          |
 | `SLACK_WEBHOOK_URL`                    | False    | `""`                     | Slack incoming webhook URL for sending conflict notifications. See the [Slack Integration](#slack-integration) section for setup instructions.                                                            |
 | `SLACK_CHANNEL`                        | False    | `""`                     | Override the default Slack channel configured in the webhook. Example: `#pr-conflicts`                                                                                                                   |
 | `ENABLE_GITHUB_ACTIONS_STEP_SUMMARY`   | False    | `true`                   | If set to `true`, the conflict report will be written to the GitHub Actions workflow summary for easy viewing in the Actions UI.                                                                          |
 | `FILTER_AUTHORS`                       | False    | `""`                     | A comma-separated list of GitHub usernames. When set, only PRs authored by these users will be analyzed for conflicts. Useful for incremental rollout to specific teams. Example: `alice,bob,charlie`     |
+| `ENABLE_PR_COMMENTS`                   | False    | `false`                  | If set to `true`, the action will post comments on PRs about detected conflicts. Comments include conflicting files, line ranges, and links to the other PR. See [PR Comments](#pr-comments) for details. |
 
 \*One of `ORGANIZATION` or `REPOSITORY` must be set.
 
@@ -329,6 +331,62 @@ Shared files: `src/auth.py`, `src/middleware.py`
 - **Line ranges** - Shows exactly where overlaps occur
 - **Deduplication** - Only sends for new or changed conflicts (see [Deduplication](#deduplication-and-alert-fatigue-prevention))
 - **Same-author filtering** - No notifications for conflicts between your own PRs
+
+## PR Comments
+
+The action can post comments directly on pull requests to notify authors about conflicts. This provides in-context notifications that developers see when reviewing their PRs.
+
+### Setup
+
+1. Ensure your GitHub token has write access to pull requests
+2. Set `ENABLE_PR_COMMENTS=true` in your workflow environment variables
+3. The action will automatically post comments on both PRs in each conflict pair
+
+### Comment format
+
+Each PR receives a comment like this:
+
+```markdown
+## ⚠️ Potential Merge Conflict Detected
+
+This PR may conflict with [#456](https://github.com/org/repo/pull/456) (Refactor auth module).
+
+### Conflicting Files
+- `src/auth.py` (lines: L10-L25, L42-L55)
+- `src/middleware.py` (lines: L100-L120)
+
+### What to do
+- Review the overlapping changes in the files above
+- Coordinate with @bob to resolve conflicts
+- Consider rebasing or merging to test compatibility
+
+This is an automated notification from pr-conflict-detector.
+```
+
+### Duplicate prevention
+
+- Each comment includes a hidden bot signature (`<!-- pr-conflict-detector-bot -->`)
+- Before posting, the action checks if a comment already exists for this specific conflict
+- If found (signature + other PR number present), the comment is skipped
+- Works with deduplication: only comments on new or changed conflicts
+
+### Key features
+
+- **Two-way notification** - Both PRs in the conflict get a comment
+- **Detailed context** - Shows exact files and line ranges
+- **Smart deduplication** - Won't spam PRs with duplicate comments
+- **Actionable guidance** - Tells developers what to do next
+- **Graceful error handling** - If comment check fails, assumes no duplicate to avoid blocking
+
+### Example workflow
+
+```yaml
+env:
+  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+  ORGANIZATION: my-org
+  ENABLE_PR_COMMENTS: "true"  # Enable PR comments
+  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+```
 
 ## Local development
 
