@@ -1,5 +1,7 @@
 """Tests for the pr_comment module."""
 
+# pylint: disable=protected-access
+
 import unittest
 from collections import namedtuple
 from unittest.mock import MagicMock, patch
@@ -153,9 +155,7 @@ class TestBuildComment(unittest.TestCase):
             filenames=["src/auth.py", "src/test.py"],
         )
 
-        comment = pr_comment._build_comment(
-            conflict, conflict.pr_a, conflict.pr_b, "org/repo"
-        )
+        comment = pr_comment._build_comment(conflict, conflict.pr_a, conflict.pr_b)
 
         # Check for required elements
         self.assertIn(pr_comment.COMMENT_SIGNATURE, comment)

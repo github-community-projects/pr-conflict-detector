@@ -51,18 +51,23 @@ def post_pr_comments(
                 # Check if we've already commented on this PR about this specific conflict
                 if _has_existing_comment(repo_obj, pr_info.number, other_pr.number):
                     logger.info(
-                        f"Skipping duplicate comment on {repo_name}#{pr_info.number} "
-                        f"(conflict with #{other_pr.number} already commented)"
+                        "Skipping duplicate comment on %s#%s (conflict with #%s already commented)",
+                        repo_name,
+                        pr_info.number,
+                        other_pr.number,
                     )
                     skipped_duplicates += 1
                     continue
 
                 # Build comment body
-                comment_body = _build_comment(conflict, pr_info, other_pr, repo_name)
+                comment_body = _build_comment(conflict, pr_info, other_pr)
 
                 if dry_run:
                     logger.info(
-                        f"DRY RUN: Would comment on {repo_name}#{pr_info.number}:\n{comment_body}"
+                        "DRY RUN: Would comment on %s#%s:\n%s",
+                        repo_name,
+                        pr_info.number,
+                        comment_body,
                     )
                     total_comments += 1
                 else:
@@ -74,7 +79,9 @@ def post_pr_comments(
 
     if total_comments > 0:
         logger.info(
-            f"Posted {total_comments} PR comment(s), skipped {skipped_duplicates} duplicate(s)"
+            "Posted %s PR comment(s), skipped %s duplicate(s)",
+            total_comments,
+            skipped_duplicates,
         )
 
     return all_success
@@ -102,25 +109,23 @@ def _has_existing_comment(repo, pr_number: int, other_pr_number: int) -> bool:
                 return True
         return False
     except Exception as e:  # pylint: disable=broad-except
-        logger.warning(f"Failed to check existing comments on PR #{pr_number}: {e}")
+        logger.warning("Failed to check existing comments on PR #%s: %s", pr_number, e)
         # If we can't check, assume no comment exists to avoid blocking
         return False
 
 
-def _build_comment(
-    conflict: ConflictResult, current_pr, other_pr, repo_name: str
-) -> str:
+def _build_comment(conflict: ConflictResult, current_pr, other_pr) -> str:
     """Build a comment body for a PR conflict notification.
 
     Args:
         conflict: The conflict result
-        current_pr: PRInfo for the PR being commented on
+        current_pr: PRInfo for the PR being commented on (unused but kept for consistency)
         other_pr: PRInfo for the other PR in the conflict
-        repo_name: Repository name
 
     Returns:
         Formatted comment body
     """
+    _ = current_pr  # Explicitly mark as unused
     files_list = "\n".join(
         f"- `{fo.filename}` (lines: {_format_ranges(fo.overlapping_ranges)})"
         for fo in conflict.conflicting_files
@@ -170,8 +175,8 @@ def _post_comment(repo, pr_number: int, body: str) -> bool:
     try:
         pr = repo.pull_request(pr_number)
         pr.create_comment(body)
-        logger.info(f"Posted comment to PR #{pr_number}")
+        logger.info("Posted comment to PR #%s", pr_number)
         return True
     except Exception as e:  # pylint: disable=broad-except
-        logger.error(f"Failed to post comment to PR #{pr_number}: {e}")
+        logger.error("Failed to post comment to PR #%s: %s", pr_number, e)
         return False
