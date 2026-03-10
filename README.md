@@ -13,10 +13,12 @@ This action, developed by GitHub OSPO for our internal use, is open-sourced for 
 1. **Scans open pull requests** (including drafts) in the specified organization or repositories
 2. **Fetches changed files and line ranges** for each PR
 3. **Performs pairwise comparison** to find PRs that modify overlapping lines in the same files
-4. **Optionally verifies conflicts** using GitHub's merge simulation API
-5. **Generates reports** in Markdown and JSON format
-6. **Opens issues** in affected repositories to notify teams
-7. **Sends Slack notifications** to PR authors
+4. **Filters out same-author conflicts** - PRs by the same developer conflicting with each other are excluded
+5. **Deduplicates alerts** - Tracks conflict history to only notify on new or changed conflicts
+6. **Optionally verifies conflicts** using GitHub's merge simulation API
+7. **Generates reports** in Markdown and JSON format
+8. **Opens issues** in affected repositories to notify teams
+9. **Sends targeted Slack notifications** - One message per conflict with @mentions for affected authors
 
 ## Example use cases
 
@@ -94,7 +96,7 @@ The required GitHub App permissions under `Repository permissions` are:
 | `VERIFY_CONFLICTS`                     | False    | `false`                  | If set to `true`, enables merge simulation verification using GitHub's API. Provides higher confidence results but requires additional API calls.                                                         |
 | `EXEMPT_REPOS`                         | False    | `""`                     | A comma-separated list of repositories to exclude from scanning. Example: `owner/repo-to-skip,owner/another-repo`                                                                                        |
 | `EXEMPT_PRS`                           | False    | `""`                     | A comma-separated list of PR numbers to exclude from conflict analysis. Example: `123,456,789`                                                                                                           |
-| `DRY_RUN`                              | False    | `false`                  | If set to `true`, the action will generate reports but skip issue creation and Slack notifications. Useful for testing.                                                                                   |
+| `DRY_RUN`                              | False    | `false`                  | If set to `true`, the action will generate reports but skip issue creation, Slack notifications, and state file modifications. Useful for testing.                                                        |
 | `REPORT_TITLE`                         | False    | `PR Conflict Report`     | The title used for the generated conflict report and any issues created.                                                                                                                                 |
 | `OUTPUT_FILE`                          | False    | `pr_conflict_report.md`  | The filename for the generated Markdown report.                                                                                                                                                          |
 | `SLACK_WEBHOOK_URL`                    | False    | `""`                     | Slack incoming webhook URL for sending conflict notifications. See the [Slack Integration](#slack-integration) section for setup instructions.                                                            |
@@ -234,9 +236,54 @@ When `VERIFY_CONFLICTS` is set to `true`, the action uses GitHub's API to attemp
 - File grouping algorithm avoids O(n²) pairwise comparison across all PRs
 - Rate limit aware with graceful handling of GitHub API limits
 
+## Deduplication and alert fatigue prevention
+
+The action tracks conflict history in a `.pr-conflict-state.json` file committed to your repository. This prevents alert fatigue by only notifying about new or changed conflicts.
+
+### How it works
+
+Each conflict is fingerprinted by:
+- Repository name
+- PR numbers (A and B)
+- List of conflicting files
+- First detection timestamp
+
+On each run, the action:
+1. Loads the previous state file
+2. Compares current conflicts against historical state
+3. Categorizes conflicts as:
+   - **New** - Not seen before → Slack notification sent
+   - **Changed** - Same PR pair but different files → Slack notification sent
+   - **Unchanged** - Same PRs, same files → No notification (already alerted)
+   - **Resolved** - Was in state but not detected now → Logged for reference
+4. Updates the state file with current conflicts
+5. Auto-prunes fingerprints older than 42 days
+
+### Example behavior
+
+```
+Run 1: Detects 10 conflicts → All are new → 10 Slack messages sent
+Run 2: Same 10 conflicts → All unchanged → No Slack messages
+Run 3: 9 unchanged, 1 changed files → 1 Slack message for the changed conflict
+Run 4: 2 conflicts resolved, 1 new → 1 Slack message for the new conflict
+```
+
+### Same-author filtering
+
+Conflicts where both PRs are authored by the same person are automatically filtered out. If Alice has PR #123 and PR #456 that conflict, she likely already knows about both and can manage the conflict herself when merging.
+
+### State file management
+
+- **Location:** `.pr-conflict-state.json` in the repository root
+- **Format:** JSON with conflict fingerprints
+- **Persistence:** Committed to the repository after each run
+- **Dry run:** When `DRY_RUN=true`, the state file is not modified
+
+The state file is automatically managed by the action - no manual intervention required.
+
 ## Slack integration
 
-The action can send Slack notifications to alert PR authors about detected conflicts.
+The action sends targeted Slack notifications with @mentions to alert PR authors about conflicts. Each conflict gets its own message to avoid notification overload.
 
 ### Setup
 
@@ -245,16 +292,43 @@ The action can send Slack notifications to alert PR authors about detected confl
 3. Set the `SLACK_WEBHOOK_URL` environment variable in your workflow
 4. Optionally set `SLACK_CHANNEL` to override the default channel configured in the webhook
 
-### Example notification
+### Notification format
 
-When conflicts are detected, a Slack message is sent with the following format:
+**For simple 2-PR conflicts:**
 
-> **🔀 PR Conflict Detected**
->
-> **Repository:** owner/repo-name
-> **PR A:** #123 — Add new feature (@alice)
-> **PR B:** #456 — Refactor module (@bob)
-> **Conflicting files:** `src/main.py` (lines 10-25)
+```
+<@alice> <@bob> Your PRs may conflict:
+
+github/repo-name
+#123 (Add authentication) ↔ #456 (Refactor auth module)
+
+Files:
+  • `src/auth.py` (L10-L25, L42-L55)
+  • `src/middleware.py` (L100-L120)
+```
+
+**For multi-PR clusters (3+ PRs conflicting on same files):**
+
+```
+<@alice> <@bob> <@charlie> Your PRs may conflict:
+
+github/repo-name — Cluster: 3 PRs, 3 conflict pair(s)
+
+PRs:
+  • #123 Add authentication
+  • #456 Refactor auth module
+  • #789 Update auth tests
+
+Shared files: `src/auth.py`, `src/middleware.py`
+```
+
+### Key features
+
+- **One message per conflict** - Users only see conflicts relevant to them
+- **@mentions** - Authors are mentioned (assumes GitHub username = Slack username)
+- **Line ranges** - Shows exactly where overlaps occur
+- **Deduplication** - Only sends for new or changed conflicts (see [Deduplication](#deduplication-and-alert-fatigue-prevention))
+- **Same-author filtering** - No notifications for conflicts between your own PRs
 
 ## Local development
 
