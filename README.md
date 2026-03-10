@@ -76,7 +76,7 @@ This action can be configured to authenticate with GitHub App Installation or Pe
 
 The required GitHub App permissions under `Repository permissions` are:
 
-- `Pull Requests` - Read (needed to scan open pull requests and their changed files)
+- `Pull Requests` - Read and Write (Read: scan open pull requests and their changed files; Write: post PR comments when `ENABLE_PR_COMMENTS` is enabled)
 - `Contents` - Read (needed to fetch file diffs and line ranges)
 - `Issues` - Read and Write (needed to create conflict report issues)
 
@@ -84,7 +84,7 @@ The required GitHub App permissions under `Repository permissions` are:
 
 | field      | required | default | description                                                                                                                                              |
 | ---------- | -------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GH_TOKEN` | True     | `""`    | The GitHub Token used to scan repositories. Must have read access to pull requests and contents, and write access to issues for all repositories in scope. |
+| `GH_TOKEN` | True     | `""`    | The GitHub Token used to scan repositories. Must have read access to pull requests and contents, and write access to issues and pull requests for all repositories in scope. |
 
 #### Other Configuration Options
 
@@ -123,6 +123,8 @@ on:
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 jobs:
   detect-conflicts:
@@ -149,6 +151,8 @@ on:
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 jobs:
   detect-conflicts:
@@ -173,6 +177,8 @@ on:
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 jobs:
   detect-conflicts:
@@ -203,6 +209,8 @@ on:
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 jobs:
   detect-conflicts:
