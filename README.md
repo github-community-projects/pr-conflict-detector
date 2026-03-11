@@ -250,7 +250,7 @@ When `VERIFY_CONFLICTS` is set to `true`, the action uses GitHub's API to attemp
 
 The action tracks conflict history in a `.pr-conflict-state.json` file committed to your repository. This prevents alert fatigue by only notifying about new or changed conflicts.
 
-### How it works
+### How it works - details
 
 Each conflict is fingerprinted by:
 
@@ -273,7 +273,7 @@ On each run, the action:
 
 ### Example behavior
 
-```
+```markdown
 Run 1: Detects 10 conflicts → All are new → 10 Slack messages sent
 Run 2: Same 10 conflicts → All unchanged → No Slack messages
 Run 3: 9 unchanged, 1 changed files → 1 Slack message for the changed conflict
@@ -308,7 +308,7 @@ The action sends targeted Slack notifications with @mentions to alert PR authors
 
 **For simple 2-PR conflicts:**
 
-```
+```markdown
 <@alice> <@bob> Your PRs may conflict:
 
 github/repo-name
@@ -321,7 +321,7 @@ Files:
 
 **For multi-PR clusters (3+ PRs conflicting on same files):**
 
-```
+```markdown
 <@alice> <@bob> <@charlie> Your PRs may conflict:
 
 github/repo-name — Cluster: 3 PRs, 3 conflict pair(s)
@@ -334,7 +334,7 @@ PRs:
 Shared files: `src/auth.py`, `src/middleware.py`
 ```
 
-### Key features
+### Key features of slack integration
 
 - **One message per conflict** - Users only see conflicts relevant to them
 - **@mentions** - Authors are mentioned (assumes GitHub username = Slack username)
@@ -346,7 +346,7 @@ Shared files: `src/auth.py`, `src/middleware.py`
 
 The action can post comments directly on pull requests to notify authors about conflicts. This provides in-context notifications that developers see when reviewing their PRs.
 
-### Setup
+### Getting Setup
 
 1. Ensure your GitHub token has write access to pull requests
 2. Set `ENABLE_PR_COMMENTS=true` in your workflow environment variables
@@ -382,7 +382,7 @@ This is an automated notification from pr-conflict-detector.
 - If found (signature + other PR number present), the comment is skipped
 - Works with deduplication: only comments on new or changed conflicts
 
-### Key features
+### Key features of PR comments
 
 - **Two-way notification** - Both PRs in the conflict get a comment
 - **Detailed context** - Shows exact files and line ranges
