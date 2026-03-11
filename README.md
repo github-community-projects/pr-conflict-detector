@@ -315,8 +315,8 @@ github/repo-name
 #123 (Add authentication) ↔ #456 (Refactor auth module)
 
 Files:
-  • `src/auth.py` (L10-L25, L42-L55)
-  • `src/middleware.py` (L100-L120)
+• `src/auth.py` (L10-L25, L42-L55)
+• `src/middleware.py` (L100-L120)
 ```
 
 **For multi-PR clusters (3+ PRs conflicting on same files):**
@@ -327,9 +327,9 @@ Files:
 github/repo-name — Cluster: 3 PRs, 3 conflict pair(s)
 
 PRs:
-  • #123 Add authentication
-  • #456 Refactor auth module
-  • #789 Update auth tests
+• #123 Add authentication
+• #456 Refactor auth module
+• #789 Update auth tests
 
 Shared files: `src/auth.py`, `src/middleware.py`
 ```
