@@ -37,6 +37,7 @@ coverage.xml
 .vscode/
 .DS_Store
 venv/
+**/.claude/*.local.*
 
 pr_conflict_report.json
 pr_conflict_report.md
