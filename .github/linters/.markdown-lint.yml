@@ -1,0 +1,13 @@
+# Linter rules doc
+
+## line length
+
+MD013: false
+
+## single h1
+
+MD025: false
+
+## duplicate headers
+
+MD024: false

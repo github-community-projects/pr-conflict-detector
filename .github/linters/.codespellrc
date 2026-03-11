@@ -1,0 +1,3 @@
+[codespell]
+skip = *.py
+ignore-words-list = astroid

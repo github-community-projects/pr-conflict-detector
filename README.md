@@ -34,10 +34,10 @@ The action generates a Markdown report with a table of detected conflicts:
 
 ### owner/repo-name
 
-| PR A | PR B | Conflicting Files | Overlapping Lines | Authors |
-|------|------|-------------------|-------------------|---------|
-| [#123](https://github.com/owner/repo/pull/123) Add new feature | [#456](https://github.com/owner/repo/pull/456) Refactor module | `src/main.py` | L10-L25 | @alice, @bob |
-| [#789](https://github.com/owner/repo/pull/789) Update config | [#456](https://github.com/owner/repo/pull/456) Refactor module | `config/settings.yml` | L3-L8 | @carol, @bob |
+| PR A                                                           | PR B                                                           | Conflicting Files     | Overlapping Lines | Authors      |
+| -------------------------------------------------------------- | -------------------------------------------------------------- | --------------------- | ----------------- | ------------ |
+| [#123](https://github.com/owner/repo/pull/123) Add new feature | [#456](https://github.com/owner/repo/pull/456) Refactor module | `src/main.py`         | L10-L25           | @alice, @bob |
+| [#789](https://github.com/owner/repo/pull/789) Update config   | [#456](https://github.com/owner/repo/pull/456) Refactor module | `config/settings.yml` | L3-L8             | @carol, @bob |
 
 ## Support
 
@@ -82,29 +82,29 @@ The required GitHub App permissions under `Repository permissions` are:
 
 ##### Personal Access Token (PAT)
 
-| field      | required | default | description                                                                                                                                              |
-| ---------- | -------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| field      | required | default | description                                                                                                                                                                  |
+| ---------- | -------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GH_TOKEN` | True     | `""`    | The GitHub Token used to scan repositories. Must have read access to pull requests and contents, and write access to issues and pull requests for all repositories in scope. |
 
 #### Other Configuration Options
 
-| field                                  | required | default                  | description                                                                                                                                                                                              |
-| -------------------------------------- | -------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GH_ENTERPRISE_URL`                    | False    | `""`                     | The URL of a GitHub Enterprise instance to use for authentication instead of github.com. Example: `https://github.example.com`                                                                           |
-| `ORGANIZATION`                         | True\*   | `""`                     | The name of the GitHub organization to scan for open pull requests. ie. github.com/github would be `github`                                                                                              |
-| `REPOSITORY`                           | True\*   | `""`                     | A comma-separated list of repositories to scan in `owner/repo` format. ie. `github-community-projects/pr-conflict-detector` or `owner/repo1,owner/repo2`                                                |
-| `INCLUDE_DRAFTS`                       | False    | `true`                   | If set to `true`, draft pull requests will be included in the conflict analysis. Set to `false` to skip draft PRs.                                                                                       |
-| `VERIFY_CONFLICTS`                     | False    | `false`                  | If set to `true`, enables merge simulation verification using GitHub's API. Provides higher confidence results but requires additional API calls.                                                         |
-| `EXEMPT_REPOS`                         | False    | `""`                     | A comma-separated list of repositories to exclude from scanning. Example: `owner/repo-to-skip,owner/another-repo`                                                                                        |
-| `EXEMPT_PRS`                           | False    | `""`                     | A comma-separated list of PR numbers to exclude from conflict analysis. Example: `123,456,789`                                                                                                           |
-| `DRY_RUN`                              | False    | `false`                  | If set to `true`, the action will generate reports but skip issue creation, Slack notifications, PR comments, and state file modifications. Useful for testing.                                           |
-| `REPORT_TITLE`                         | False    | `PR Conflict Report`     | The title used for the generated conflict report and any issues created.                                                                                                                                 |
-| `OUTPUT_FILE`                          | False    | `pr_conflict_report.md`  | The filename for the generated Markdown report.                                                                                                                                                          |
-| `SLACK_WEBHOOK_URL`                    | False    | `""`                     | Slack incoming webhook URL for sending conflict notifications. See the [Slack Integration](#slack-integration) section for setup instructions.                                                            |
-| `SLACK_CHANNEL`                        | False    | `""`                     | Override the default Slack channel configured in the webhook. Example: `#pr-conflicts`                                                                                                                   |
-| `ENABLE_GITHUB_ACTIONS_STEP_SUMMARY`   | False    | `true`                   | If set to `true`, the conflict report will be written to the GitHub Actions workflow summary for easy viewing in the Actions UI.                                                                          |
-| `FILTER_AUTHORS`                       | False    | `""`                     | A comma-separated list of GitHub usernames. When set, only PRs authored by these users will be analyzed for conflicts. Useful for incremental rollout to specific teams. Example: `alice,bob,charlie`     |
-| `ENABLE_PR_COMMENTS`                   | False    | `false`                  | If set to `true`, the action will post comments on PRs about detected conflicts. Comments include conflicting files, line ranges, and links to the other PR. See [PR Comments](#pr-comments) for details. |
+| field                                | required | default                 | description                                                                                                                                                                                               |
+| ------------------------------------ | -------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GH_ENTERPRISE_URL`                  | False    | `""`                    | The URL of a GitHub Enterprise instance to use for authentication instead of github.com. Example: `https://github.example.com`                                                                            |
+| `ORGANIZATION`                       | True\*   | `""`                    | The name of the GitHub organization to scan for open pull requests. ie. github.com/github would be `github`                                                                                               |
+| `REPOSITORY`                         | True\*   | `""`                    | A comma-separated list of repositories to scan in `owner/repo` format. ie. `github-community-projects/pr-conflict-detector` or `owner/repo1,owner/repo2`                                                  |
+| `INCLUDE_DRAFTS`                     | False    | `true`                  | If set to `true`, draft pull requests will be included in the conflict analysis. Set to `false` to skip draft PRs.                                                                                        |
+| `VERIFY_CONFLICTS`                   | False    | `false`                 | If set to `true`, enables merge simulation verification using GitHub's API. Provides higher confidence results but requires additional API calls.                                                         |
+| `EXEMPT_REPOS`                       | False    | `""`                    | A comma-separated list of repositories to exclude from scanning. Example: `owner/repo-to-skip,owner/another-repo`                                                                                         |
+| `EXEMPT_PRS`                         | False    | `""`                    | A comma-separated list of PR numbers to exclude from conflict analysis. Example: `123,456,789`                                                                                                            |
+| `DRY_RUN`                            | False    | `false`                 | If set to `true`, the action will generate reports but skip issue creation, Slack notifications, PR comments, and state file modifications. Useful for testing.                                           |
+| `REPORT_TITLE`                       | False    | `PR Conflict Report`    | The title used for the generated conflict report and any issues created.                                                                                                                                  |
+| `OUTPUT_FILE`                        | False    | `pr_conflict_report.md` | The filename for the generated Markdown report.                                                                                                                                                           |
+| `SLACK_WEBHOOK_URL`                  | False    | `""`                    | Slack incoming webhook URL for sending conflict notifications. See the [Slack Integration](#slack-integration) section for setup instructions.                                                            |
+| `SLACK_CHANNEL`                      | False    | `""`                    | Override the default Slack channel configured in the webhook. Example: `#pr-conflicts`                                                                                                                    |
+| `ENABLE_GITHUB_ACTIONS_STEP_SUMMARY` | False    | `true`                  | If set to `true`, the conflict report will be written to the GitHub Actions workflow summary for easy viewing in the Actions UI.                                                                          |
+| `FILTER_AUTHORS`                     | False    | `""`                    | A comma-separated list of GitHub usernames. When set, only PRs authored by these users will be analyzed for conflicts. Useful for incremental rollout to specific teams. Example: `alice,bob,charlie`     |
+| `ENABLE_PR_COMMENTS`                 | False    | `false`                 | If set to `true`, the action will post comments on PRs about detected conflicts. Comments include conflicting files, line ranges, and links to the other PR. See [PR Comments](#pr-comments) for details. |
 
 \*One of `ORGANIZATION` or `REPOSITORY` must be set.
 
@@ -118,7 +118,7 @@ This workflow runs on weekdays at 9 AM UTC and scans all repositories in the spe
 name: PR Conflict Detection
 on:
   schedule:
-    - cron: "0 9 * * 1-5"  # Weekdays at 9 AM UTC
+    - cron: "0 9 * * 1-5" # Weekdays at 9 AM UTC
   workflow_dispatch:
 
 permissions:
@@ -250,15 +250,17 @@ When `VERIFY_CONFLICTS` is set to `true`, the action uses GitHub's API to attemp
 
 The action tracks conflict history in a `.pr-conflict-state.json` file committed to your repository. This prevents alert fatigue by only notifying about new or changed conflicts.
 
-### How it works
+### How it works - details
 
 Each conflict is fingerprinted by:
+
 - Repository name
 - PR numbers (A and B)
 - List of conflicting files
 - First detection timestamp
 
 On each run, the action:
+
 1. Loads the previous state file
 2. Compares current conflicts against historical state
 3. Categorizes conflicts as:
@@ -271,7 +273,7 @@ On each run, the action:
 
 ### Example behavior
 
-```
+```markdown
 Run 1: Detects 10 conflicts → All are new → 10 Slack messages sent
 Run 2: Same 10 conflicts → All unchanged → No Slack messages
 Run 3: 9 unchanged, 1 changed files → 1 Slack message for the changed conflict
@@ -306,33 +308,33 @@ The action sends targeted Slack notifications with @mentions to alert PR authors
 
 **For simple 2-PR conflicts:**
 
-```
+```markdown
 <@alice> <@bob> Your PRs may conflict:
 
 github/repo-name
 #123 (Add authentication) ↔ #456 (Refactor auth module)
 
 Files:
-  • `src/auth.py` (L10-L25, L42-L55)
-  • `src/middleware.py` (L100-L120)
+• `src/auth.py` (L10-L25, L42-L55)
+• `src/middleware.py` (L100-L120)
 ```
 
 **For multi-PR clusters (3+ PRs conflicting on same files):**
 
-```
+```markdown
 <@alice> <@bob> <@charlie> Your PRs may conflict:
 
 github/repo-name — Cluster: 3 PRs, 3 conflict pair(s)
 
 PRs:
-  • #123 Add authentication
-  • #456 Refactor auth module
-  • #789 Update auth tests
+• #123 Add authentication
+• #456 Refactor auth module
+• #789 Update auth tests
 
 Shared files: `src/auth.py`, `src/middleware.py`
 ```
 
-### Key features
+### Key features of slack integration
 
 - **One message per conflict** - Users only see conflicts relevant to them
 - **@mentions** - Authors are mentioned (assumes GitHub username = Slack username)
@@ -344,7 +346,7 @@ Shared files: `src/auth.py`, `src/middleware.py`
 
 The action can post comments directly on pull requests to notify authors about conflicts. This provides in-context notifications that developers see when reviewing their PRs.
 
-### Setup
+### Getting Setup
 
 1. Ensure your GitHub token has write access to pull requests
 2. Set `ENABLE_PR_COMMENTS=true` in your workflow environment variables
@@ -360,10 +362,12 @@ Each PR receives a comment like this:
 This PR may conflict with [#456](https://github.com/org/repo/pull/456) (Refactor auth module).
 
 ### Conflicting Files
+
 - `src/auth.py` (lines: L10-L25, L42-L55)
 - `src/middleware.py` (lines: L100-L120)
 
 ### What to do
+
 - Review the overlapping changes in the files above
 - Coordinate with @bob to resolve conflicts
 - Consider rebasing or merging to test compatibility
@@ -378,7 +382,7 @@ This is an automated notification from pr-conflict-detector.
 - If found (signature + other PR number present), the comment is skipped
 - Works with deduplication: only comments on new or changed conflicts
 
-### Key features
+### Key features of PR comments
 
 - **Two-way notification** - Both PRs in the conflict get a comment
 - **Detailed context** - Shows exact files and line ranges
@@ -392,7 +396,7 @@ This is an automated notification from pr-conflict-detector.
 env:
   GH_TOKEN: ${{ secrets.GH_TOKEN }}
   ORGANIZATION: my-org
-  ENABLE_PR_COMMENTS: "true"  # Enable PR comments
+  ENABLE_PR_COMMENTS: "true" # Enable PR comments
   SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 ```
 
