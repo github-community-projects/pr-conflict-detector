@@ -407,19 +407,15 @@ env:
 git clone https://github.com/github-community-projects/pr-conflict-detector.git
 cd pr-conflict-detector
 
-# Set up a virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
 # Set up environment
 cp .env-example .env
 # Edit .env with your configuration
 
 # Install dependencies
-pip install -r requirements.txt -r requirements-test.txt
+uv sync
 
 # Run locally
-python3 pr_conflict_detector.py
+uv run pr_conflict_detector.py
 
 # Run tests
 make test
