@@ -31,6 +31,7 @@ class TestEnv(unittest.TestCase):
             "SLACK_WEBHOOK_URL",
             "VERIFY_CONFLICTS",
             "FILTER_AUTHORS",
+            "FILTER_TEAMS",
         ]
         for key in env_keys:
             if key in os.environ:
@@ -77,6 +78,7 @@ class TestEnv(unittest.TestCase):
             enable_github_actions_step_summary=False,
             enable_pr_comments=False,
             filter_authors=[],
+            filter_teams=[],
         )
         result = get_env_vars(True)
         self.assertEqual(result, expected_result)
@@ -111,6 +113,7 @@ class TestEnv(unittest.TestCase):
             slack_channel="",
             enable_github_actions_step_summary=True,
             filter_authors=[],
+            filter_teams=[],
             enable_pr_comments=False,
         )
         result = get_env_vars(True)
@@ -146,6 +149,7 @@ class TestEnv(unittest.TestCase):
             slack_channel="",
             enable_github_actions_step_summary=True,
             filter_authors=[],
+            filter_teams=[],
             enable_pr_comments=False,
         )
         result = get_env_vars(True)
@@ -350,6 +354,47 @@ class TestEnv(unittest.TestCase):
         """Test that unset FILTER_AUTHORS defaults to empty list"""
         result = get_env_vars(True)
         self.assertEqual(result.filter_authors, [])
+
+    @patch.dict(
+        os.environ,
+        {
+            "ORGANIZATION": "my_organization",
+            "GH_TOKEN": "my_token",
+            "FILTER_TEAMS": "my-org/team-a, my-org/team-b",
+        },
+        clear=True,
+    )
+    def test_get_env_vars_filter_teams(self):
+        """Test that FILTER_TEAMS parses correctly with whitespace handling"""
+        result = get_env_vars(True)
+        self.assertEqual(result.filter_teams, ["my-org/team-a", "my-org/team-b"])
+
+    @patch.dict(
+        os.environ,
+        {
+            "ORGANIZATION": "my_organization",
+            "GH_TOKEN": "my_token",
+            "FILTER_TEAMS": "",
+        },
+        clear=True,
+    )
+    def test_get_env_vars_filter_teams_empty(self):
+        """Test that empty FILTER_TEAMS results in empty list"""
+        result = get_env_vars(True)
+        self.assertEqual(result.filter_teams, [])
+
+    @patch.dict(
+        os.environ,
+        {
+            "ORGANIZATION": "my_organization",
+            "GH_TOKEN": "my_token",
+        },
+        clear=True,
+    )
+    def test_get_env_vars_filter_teams_not_set(self):
+        """Test that unset FILTER_TEAMS defaults to empty list"""
+        result = get_env_vars(True)
+        self.assertEqual(result.filter_teams, [])
 
 
 if __name__ == "__main__":

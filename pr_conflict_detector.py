@@ -31,6 +31,34 @@ def main():
         env_vars.gh_app_enterprise_only,
     )
 
+    # 2b. Resolve FILTER_TEAMS into usernames and merge with FILTER_AUTHORS
+    combined_filter_authors = set(env_vars.filter_authors)
+    if env_vars.filter_teams:
+        print("\nResolving FILTER_TEAMS...")
+        for team_ref in env_vars.filter_teams:
+            parts = team_ref.split("/", 1)
+            if len(parts) != 2 or not parts[0] or not parts[1]:
+                print(
+                    f"  ⚠️  Invalid team format '{team_ref}', expected 'org/team-slug'"
+                )
+                continue
+            org, team_slug = parts
+            members = auth.get_team_members(github_connection, org, team_slug)
+            combined_filter_authors.update(members)
+
+        if env_vars.filter_authors:
+            print(
+                f"Combined {len(env_vars.filter_authors)} FILTER_AUTHORS + "
+                f"team members = {len(combined_filter_authors)} unique author(s)"
+            )
+        else:
+            print(
+                f"Resolved {len(combined_filter_authors)} unique author(s) from teams"
+            )
+
+    # Build the effective filter list
+    effective_filter_authors = sorted(combined_filter_authors)
+
     # 3. Get repositories to scan
     repos = get_repos_iterator(github_connection, env_vars)
 
@@ -62,11 +90,11 @@ def main():
         if env_vars.exempt_prs:
             prs = [pr for pr in prs if pr.number not in env_vars.exempt_prs]
 
-        # Filter by author if configured
-        if env_vars.filter_authors:
-            prs = [pr for pr in prs if pr.author in env_vars.filter_authors]
+        # Filter by author if configured (FILTER_AUTHORS and/or FILTER_TEAMS)
+        if effective_filter_authors:
+            prs = [pr for pr in prs if pr.author in effective_filter_authors]
             if not prs:
-                print(f"  No PRs from filtered authors: {env_vars.filter_authors}")
+                print(f"  No PRs from filtered authors: {effective_filter_authors}")
                 continue
 
         if len(prs) < 2:

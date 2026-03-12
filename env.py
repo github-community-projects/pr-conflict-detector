@@ -32,6 +32,7 @@ class EnvVars:  # pylint: disable=too-many-instance-attributes
     slack_channel: str
     enable_github_actions_step_summary: bool
     filter_authors: list[str]
+    filter_teams: list[str]
     enable_pr_comments: bool
 
 
@@ -168,6 +169,14 @@ def get_env_vars(test: bool = False) -> EnvVars:
             if author.strip()
         ]
 
+    # Parse filter teams (org/team-slug format)
+    filter_teams_str = os.getenv("FILTER_TEAMS")
+    filter_teams: list[str] = []
+    if filter_teams_str:
+        filter_teams = [
+            team.strip() for team in filter_teams_str.split(",") if team.strip()
+        ]
+
     enable_pr_comments = get_bool_env_var("ENABLE_PR_COMMENTS")
 
     return EnvVars(
@@ -190,5 +199,6 @@ def get_env_vars(test: bool = False) -> EnvVars:
         slack_channel=slack_channel,
         enable_github_actions_step_summary=enable_github_actions_step_summary,
         filter_authors=filter_authors,
+        filter_teams=filter_teams,
         enable_pr_comments=enable_pr_comments,
     )

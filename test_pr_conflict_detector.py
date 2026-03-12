@@ -50,6 +50,7 @@ def _make_env_vars(**overrides):
         "slack_channel": "",
         "enable_github_actions_step_summary": False,
         "filter_authors": [],
+        "filter_teams": [],
         "enable_pr_comments": False,
     }
     defaults.update(overrides)
@@ -568,6 +569,145 @@ class TestFilterAuthors(unittest.TestCase):
         main()
 
         mock_detect.assert_not_called()
+
+
+@patch("pr_conflict_detector.deduplication", new=_mock_dedup_passthrough())
+@patch("pr_conflict_detector.send_slack_notification")
+@patch("pr_conflict_detector.create_or_update_issue")
+@patch("pr_conflict_detector.write_to_json")
+@patch("pr_conflict_detector.write_to_markdown")
+@patch("pr_conflict_detector.detect_conflicts")
+@patch("pr_conflict_detector.fetch_all_pr_data")
+@patch("pr_conflict_detector.auth.auth_to_github")
+@patch("pr_conflict_detector.env.get_env_vars")
+class TestFilterTeams(unittest.TestCase):
+    """Test that filter_teams resolves team members and filters PRs."""
+
+    @patch("pr_conflict_detector.auth.get_team_members")
+    def test_filter_teams_resolves_members(
+        self,
+        mock_get_team,
+        mock_get_env,
+        mock_auth,
+        mock_fetch,
+        mock_detect,
+        _mock_md,
+        _mock_json,
+        _mock_issue,
+        _mock_slack,
+    ):
+        """Verify that team slugs are resolved to members and used to filter PRs."""
+        repo = _make_repo("test-org/repo-a")
+        env_vars = _make_env_vars(filter_teams=["test-org/my-team"])
+        mock_get_env.return_value = env_vars
+
+        gh = MagicMock()
+        mock_auth.return_value = gh
+        org_mock = MagicMock()
+        org_mock.repositories.return_value = [repo]
+        gh.organization.return_value = org_mock
+
+        mock_get_team.return_value = ["alice", "bob"]
+
+        pr_alice = _make_pr(1, author="alice")
+        pr_bob = _make_pr(2, author="bob")
+        pr_charlie = _make_pr(3, author="charlie")
+        mock_fetch.return_value = [pr_alice, pr_bob, pr_charlie]
+        mock_detect.return_value = []
+
+        main()
+
+        mock_get_team.assert_called_once_with(gh, "test-org", "my-team")
+        mock_detect.assert_called_once()
+        detected_prs = mock_detect.call_args[0][0]
+        self.assertEqual(len(detected_prs), 2)
+        self.assertIn(pr_alice, detected_prs)
+        self.assertIn(pr_bob, detected_prs)
+        self.assertNotIn(pr_charlie, detected_prs)
+
+    @patch("pr_conflict_detector.auth.get_team_members")
+    def test_filter_teams_combined_with_filter_authors(
+        self,
+        mock_get_team,
+        mock_get_env,
+        mock_auth,
+        mock_fetch,
+        mock_detect,
+        _mock_md,
+        _mock_json,
+        _mock_issue,
+        _mock_slack,
+    ):
+        """Verify that FILTER_TEAMS and FILTER_AUTHORS are combined (union)."""
+        repo = _make_repo("test-org/repo-a")
+        env_vars = _make_env_vars(
+            filter_authors=["charlie"],
+            filter_teams=["test-org/my-team"],
+        )
+        mock_get_env.return_value = env_vars
+
+        gh = MagicMock()
+        mock_auth.return_value = gh
+        org_mock = MagicMock()
+        org_mock.repositories.return_value = [repo]
+        gh.organization.return_value = org_mock
+
+        mock_get_team.return_value = ["alice", "bob"]
+
+        pr_alice = _make_pr(1, author="alice")
+        pr_bob = _make_pr(2, author="bob")
+        pr_charlie = _make_pr(3, author="charlie")
+        pr_dana = _make_pr(4, author="dana")
+        mock_fetch.return_value = [pr_alice, pr_bob, pr_charlie, pr_dana]
+        mock_detect.return_value = []
+
+        main()
+
+        mock_detect.assert_called_once()
+        detected_prs = mock_detect.call_args[0][0]
+        self.assertEqual(len(detected_prs), 3)
+        self.assertIn(pr_alice, detected_prs)
+        self.assertIn(pr_bob, detected_prs)
+        self.assertIn(pr_charlie, detected_prs)
+        self.assertNotIn(pr_dana, detected_prs)
+
+    @patch("pr_conflict_detector.auth.get_team_members")
+    def test_filter_teams_invalid_format_skipped(
+        self,
+        mock_get_team,
+        mock_get_env,
+        mock_auth,
+        mock_fetch,
+        mock_detect,
+        _mock_md,
+        _mock_json,
+        _mock_issue,
+        _mock_slack,
+    ):
+        """Verify that invalid team format strings are skipped gracefully."""
+        repo = _make_repo("test-org/repo-a")
+        env_vars = _make_env_vars(filter_teams=["invalid-no-slash"])
+        mock_get_env.return_value = env_vars
+
+        gh = MagicMock()
+        mock_auth.return_value = gh
+        org_mock = MagicMock()
+        org_mock.repositories.return_value = [repo]
+        gh.organization.return_value = org_mock
+
+        pr_alice = _make_pr(1, author="alice")
+        pr_bob = _make_pr(2, author="bob")
+        mock_fetch.return_value = [pr_alice, pr_bob]
+        mock_detect.return_value = []
+
+        main()
+
+        # Invalid team format should not call get_team_members
+        mock_get_team.assert_not_called()
+        # No filter applied, so all PRs should be passed through
+        mock_detect.assert_called_once()
+        detected_prs = mock_detect.call_args[0][0]
+        self.assertEqual(len(detected_prs), 2)
 
 
 @patch("pr_conflict_detector.deduplication", new=_mock_dedup_passthrough())

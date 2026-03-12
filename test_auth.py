@@ -165,5 +165,59 @@ class TestAuth(unittest.TestCase):
         original.assert_called_once_with("GET", "https://api.github.com", timeout=60)
 
 
+class TestGetTeamMembers(unittest.TestCase):
+    """Test the get_team_members function."""
+
+    def test_get_team_members_success(self):
+        """Test successful team member resolution."""
+        mock_gh = MagicMock()
+        mock_org = MagicMock()
+        mock_team = MagicMock()
+
+        member1 = MagicMock()
+        member1.login = "alice"
+        member2 = MagicMock()
+        member2.login = "bob"
+        mock_team.members.return_value = [member1, member2]
+
+        mock_org.team_by_slug.return_value = mock_team
+        mock_gh.organization.return_value = mock_org
+
+        result = auth.get_team_members(mock_gh, "my-org", "my-team")
+
+        self.assertEqual(result, ["alice", "bob"])
+        mock_gh.organization.assert_called_once_with("my-org")
+        mock_org.team_by_slug.assert_called_once_with("my-team")
+
+    def test_get_team_members_team_not_found(self):
+        """Test that a missing team returns an empty list."""
+        mock_gh = MagicMock()
+        mock_org = MagicMock()
+        mock_org.team_by_slug.return_value = None
+        mock_gh.organization.return_value = mock_org
+
+        result = auth.get_team_members(mock_gh, "my-org", "nonexistent-team")
+
+        self.assertEqual(result, [])
+
+    def test_get_team_members_org_not_found(self):
+        """Test that a missing organization returns an empty list."""
+        mock_gh = MagicMock()
+        mock_gh.organization.return_value = None
+
+        result = auth.get_team_members(mock_gh, "nonexistent-org", "my-team")
+
+        self.assertEqual(result, [])
+
+    def test_get_team_members_api_error(self):
+        """Test that API errors are caught and return an empty list."""
+        mock_gh = MagicMock()
+        mock_gh.organization.side_effect = Exception("API rate limit exceeded")
+
+        result = auth.get_team_members(mock_gh, "my-org", "my-team")
+
+        self.assertEqual(result, [])
+
+
 if __name__ == "__main__":
     unittest.main()
