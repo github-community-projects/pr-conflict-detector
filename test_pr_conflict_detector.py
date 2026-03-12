@@ -709,6 +709,51 @@ class TestFilterTeams(unittest.TestCase):
         detected_prs = mock_detect.call_args[0][0]
         self.assertEqual(len(detected_prs), 2)
 
+    @patch("pr_conflict_detector.auth.get_team_members")
+    def test_filter_teams_overlapping_members_deduplicated(
+        self,
+        mock_get_team,
+        mock_get_env,
+        mock_auth,
+        mock_fetch,
+        mock_detect,
+        _mock_md,
+        _mock_json,
+        _mock_issue,
+        _mock_slack,
+    ):
+        """Verify that overlapping members across multiple teams are deduplicated."""
+        repo = _make_repo("test-org/repo-a")
+        env_vars = _make_env_vars(
+            filter_teams=["test-org/team-a", "test-org/team-b"],
+        )
+        mock_get_env.return_value = env_vars
+
+        gh = MagicMock()
+        mock_auth.return_value = gh
+        org_mock = MagicMock()
+        org_mock.repositories.return_value = [repo]
+        gh.organization.return_value = org_mock
+
+        # alice is in both teams
+        mock_get_team.side_effect = [["alice", "bob"], ["alice", "charlie"]]
+
+        pr_alice = _make_pr(1, author="alice")
+        pr_bob = _make_pr(2, author="bob")
+        pr_charlie = _make_pr(3, author="charlie")
+        pr_dana = _make_pr(4, author="dana")
+        mock_fetch.return_value = [pr_alice, pr_bob, pr_charlie, pr_dana]
+        mock_detect.return_value = []
+
+        main()
+
+        self.assertEqual(mock_get_team.call_count, 2)
+        mock_detect.assert_called_once()
+        detected_prs = mock_detect.call_args[0][0]
+        # alice, bob, charlie included; dana excluded
+        self.assertEqual(len(detected_prs), 3)
+        self.assertNotIn(pr_dana, detected_prs)
+
 
 @patch("pr_conflict_detector.deduplication", new=_mock_dedup_passthrough())
 @patch("pr_conflict_detector.send_slack_notification")

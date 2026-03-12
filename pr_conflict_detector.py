@@ -56,8 +56,8 @@ def main():
                 f"Resolved {len(combined_filter_authors)} unique author(s) from teams"
             )
 
-    # Build the effective filter list
-    effective_filter_authors = sorted(combined_filter_authors)
+    # Build the effective filter set (set for O(1) membership checks)
+    effective_filter_authors = combined_filter_authors
 
     # 3. Get repositories to scan
     repos = get_repos_iterator(github_connection, env_vars)
@@ -94,7 +94,9 @@ def main():
         if effective_filter_authors:
             prs = [pr for pr in prs if pr.author in effective_filter_authors]
             if not prs:
-                print(f"  No PRs from filtered authors: {effective_filter_authors}")
+                print(
+                    f"  No PRs from filtered authors ({len(effective_filter_authors)} configured)"
+                )
                 continue
 
         if len(prs) < 2:

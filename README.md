@@ -231,8 +231,9 @@ jobs:
 You can also combine `FILTER_TEAMS` with `FILTER_AUTHORS` — the members are merged (union):
 
 ```yaml
-FILTER_TEAMS: "my-org/frontend-team"
-FILTER_AUTHORS: "alice,bob" # Additional individual users
+env:
+  FILTER_TEAMS: "my-org/frontend-team"
+  FILTER_AUTHORS: "alice,bob" # Additional individual users
 ```
 
 As confidence grows, expand the team list or remove the filters entirely to cover all PRs.
