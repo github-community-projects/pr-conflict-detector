@@ -396,6 +396,36 @@ class TestEnv(unittest.TestCase):
         result = get_env_vars(True)
         self.assertEqual(result.filter_teams, [])
 
+    @patch.dict(
+        os.environ,
+        {
+            "ORGANIZATION": "my_organization",
+            "GH_TOKEN": "my_token",
+            "FILTER_TEAMS": "invalid-no-slash",
+        },
+        clear=True,
+    )
+    def test_get_env_vars_filter_teams_invalid_format(self):
+        """Test that malformed FILTER_TEAMS entries raise ValueError"""
+        with self.assertRaises(ValueError) as ctx:
+            get_env_vars(True)
+        self.assertIn("invalid-no-slash", str(ctx.exception))
+        self.assertIn("org/team-slug", str(ctx.exception))
+
+    @patch.dict(
+        os.environ,
+        {
+            "ORGANIZATION": "my_organization",
+            "GH_TOKEN": "my_token",
+            "FILTER_TEAMS": "valid-org/team-a, /missing-org",
+        },
+        clear=True,
+    )
+    def test_get_env_vars_filter_teams_empty_org_raises(self):
+        """Test that team entries with empty org part raise ValueError"""
+        with self.assertRaises(ValueError):
+            get_env_vars(True)
+
 
 if __name__ == "__main__":
     unittest.main()

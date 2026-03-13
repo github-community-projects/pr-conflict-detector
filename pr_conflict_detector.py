@@ -36,13 +36,7 @@ def main():
     if env_vars.filter_teams:
         print("\nResolving FILTER_TEAMS...")
         for team_ref in env_vars.filter_teams:
-            parts = team_ref.split("/", 1)
-            if len(parts) != 2 or not parts[0] or not parts[1]:
-                print(
-                    f"  ⚠️  Invalid team format '{team_ref}', expected 'org/team-slug'"
-                )
-                continue
-            org, team_slug = parts
+            org, team_slug = team_ref.split("/", 1)
             members = auth.get_team_members(github_connection, org, team_slug)
             combined_filter_authors.update(members)
 
@@ -51,13 +45,15 @@ def main():
                 f"Combined {len(env_vars.filter_authors)} FILTER_AUTHORS + "
                 f"team members = {len(combined_filter_authors)} unique author(s)"
             )
+        elif not combined_filter_authors:
+            print(
+                "  ⚠️  No valid teams resolved and no FILTER_AUTHORS set"
+                " — no author filtering will be applied"
+            )
         else:
             print(
                 f"Resolved {len(combined_filter_authors)} unique author(s) from teams"
             )
-
-    # Build the effective filter set (set for O(1) membership checks)
-    effective_filter_authors = combined_filter_authors
 
     # 3. Get repositories to scan
     repos = get_repos_iterator(github_connection, env_vars)
@@ -91,11 +87,11 @@ def main():
             prs = [pr for pr in prs if pr.number not in env_vars.exempt_prs]
 
         # Filter by author if configured (FILTER_AUTHORS and/or FILTER_TEAMS)
-        if effective_filter_authors:
-            prs = [pr for pr in prs if pr.author in effective_filter_authors]
+        if combined_filter_authors:
+            prs = [pr for pr in prs if pr.author in combined_filter_authors]
             if not prs:
                 print(
-                    f"  No PRs from filtered authors ({len(effective_filter_authors)} configured)"
+                    f"  No PRs from filtered authors ({len(combined_filter_authors)} configured)"
                 )
                 continue
 

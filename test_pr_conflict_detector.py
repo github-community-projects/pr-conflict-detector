@@ -672,7 +672,7 @@ class TestFilterTeams(unittest.TestCase):
         self.assertNotIn(pr_dana, detected_prs)
 
     @patch("pr_conflict_detector.auth.get_team_members")
-    def test_filter_teams_invalid_format_skipped(
+    def test_filter_teams_empty_resolution_warns(
         self,
         mock_get_team,
         mock_get_env,
@@ -684,9 +684,9 @@ class TestFilterTeams(unittest.TestCase):
         _mock_issue,
         _mock_slack,
     ):
-        """Verify that invalid team format strings are skipped gracefully."""
+        """Verify warning when FILTER_TEAMS resolves to no members."""
         repo = _make_repo("test-org/repo-a")
-        env_vars = _make_env_vars(filter_teams=["invalid-no-slash"])
+        env_vars = _make_env_vars(filter_teams=["test-org/empty-team"])
         mock_get_env.return_value = env_vars
 
         gh = MagicMock()
@@ -695,16 +695,22 @@ class TestFilterTeams(unittest.TestCase):
         org_mock.repositories.return_value = [repo]
         gh.organization.return_value = org_mock
 
+        mock_get_team.return_value = []
+
         pr_alice = _make_pr(1, author="alice")
         pr_bob = _make_pr(2, author="bob")
         mock_fetch.return_value = [pr_alice, pr_bob]
         mock_detect.return_value = []
 
-        main()
+        with patch("builtins.print") as mock_print:
+            main()
 
-        # Invalid team format should not call get_team_members
-        mock_get_team.assert_not_called()
-        # No filter applied, so all PRs should be passed through
+        # Should warn that no filtering will be applied
+        warning_calls = [
+            str(c) for c in mock_print.call_args_list if "No valid teams" in str(c)
+        ]
+        self.assertEqual(len(warning_calls), 1)
+        # All PRs should pass through (no filter applied)
         mock_detect.assert_called_once()
         detected_prs = mock_detect.call_args[0][0]
         self.assertEqual(len(detected_prs), 2)

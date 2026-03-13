@@ -173,9 +173,17 @@ def get_env_vars(test: bool = False) -> EnvVars:
     filter_teams_str = os.getenv("FILTER_TEAMS")
     filter_teams: list[str] = []
     if filter_teams_str:
-        filter_teams = [
-            team.strip() for team in filter_teams_str.split(",") if team.strip()
-        ]
+        for team in filter_teams_str.split(","):
+            team = team.strip()
+            if not team:
+                continue
+            parts = team.split("/", 1)
+            if len(parts) != 2 or not parts[0] or not parts[1]:
+                raise ValueError(
+                    f"FILTER_TEAMS entry '{team}' is invalid, "
+                    "expected 'org/team-slug' format"
+                )
+            filter_teams.append(team)
 
     enable_pr_comments = get_bool_env_var("ENABLE_PR_COMMENTS")
 
