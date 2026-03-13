@@ -79,6 +79,7 @@ The required GitHub App permissions under `Repository permissions` are:
 - `Pull Requests` - Read and Write (Read: scan open pull requests and their changed files; Write: post PR comments when `ENABLE_PR_COMMENTS` is enabled)
 - `Contents` - Read (needed to fetch file diffs and line ranges)
 - `Issues` - Read and Write (needed to create conflict report issues)
+- `Members` - Read (needed for `FILTER_TEAMS` to resolve team membership; only required if using `FILTER_TEAMS`)
 
 ##### Personal Access Token (PAT)
 
@@ -104,6 +105,7 @@ The required GitHub App permissions under `Repository permissions` are:
 | `SLACK_CHANNEL`                      | False    | `""`                    | Override the default Slack channel configured in the webhook. Example: `#pr-conflicts`                                                                                                                    |
 | `ENABLE_GITHUB_ACTIONS_STEP_SUMMARY` | False    | `true`                  | If set to `true`, the conflict report will be written to the GitHub Actions workflow summary for easy viewing in the Actions UI.                                                                          |
 | `FILTER_AUTHORS`                     | False    | `""`                    | A comma-separated list of GitHub usernames. When set, only PRs authored by these users will be analyzed for conflicts. Useful for incremental rollout to specific teams. Example: `alice,bob,charlie`     |
+| `FILTER_TEAMS`                       | False    | `""`                    | A comma-separated list of GitHub teams (`org/team-slug`). Members are resolved at runtime and merged with `FILTER_AUTHORS`. Requires `read:org` scope. Example: `my-org/frontend,my-org/backend`          |
 | `ENABLE_PR_COMMENTS`                 | False    | `false`                 | If set to `true`, the action will post comments on PRs about detected conflicts. Comments include conflicting files, line ranges, and links to the other PR. See [PR Comments](#pr-comments) for details. |
 
 \*One of `ORGANIZATION` or `REPOSITORY` must be set.
@@ -198,7 +200,7 @@ jobs:
 
 #### Incremental rollout to a specific team
 
-If you have a large monorepo with many contributors, you can use `FILTER_AUTHORS` to limit conflict detection to your team's PRs. This lets you roll out the action incrementally without affecting other teams:
+If you have a large monorepo with many contributors, you can use `FILTER_AUTHORS` or `FILTER_TEAMS` to limit conflict detection to your team's PRs. This lets you roll out the action incrementally without affecting other teams:
 
 ```yaml
 name: PR Conflict Detection (My Team)
@@ -222,11 +224,21 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           REPOSITORY: my-org/company-monolith
-          FILTER_AUTHORS: "alice,bob,charlie,dana"
+          FILTER_TEAMS: "my-org/frontend-team,my-org/backend-team"
           DRY_RUN: "true"
 ```
 
-As confidence grows, expand the author list or remove `FILTER_AUTHORS` entirely to cover all PRs.
+You can also combine `FILTER_TEAMS` with `FILTER_AUTHORS` — the members are merged (union):
+
+```yaml
+env:
+  FILTER_TEAMS: "my-org/frontend-team"
+  FILTER_AUTHORS: "alice,bob" # Additional individual users
+```
+
+As confidence grows, expand the team list or remove the filters entirely to cover all PRs.
+
+> **Note:** `FILTER_TEAMS` requires the token to have `read:org` scope to resolve team membership. If a team is not found or the token lacks permissions, the action logs a warning and skips that team.
 
 ## How conflict detection works
 

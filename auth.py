@@ -112,3 +112,45 @@ def get_github_app_installation_token(
         print(f"Request failed: {e}")
         return None
     return response.json().get("token")
+
+
+def get_team_members(
+    github_connection: github3.GitHub,
+    org: str,
+    team_slug: str,
+) -> list[str]:
+    """
+    Fetch the members of a GitHub team by slug.
+
+    Args:
+        github_connection: Authenticated github3 connection.
+        org: The organization that owns the team.
+        team_slug: The team slug (e.g., "nux-reviewers").
+
+    Returns:
+        A list of GitHub usernames (logins) who are members of the team.
+        Returns an empty list if the team is not found or an error occurs.
+    """
+    try:
+        organization = github_connection.organization(org)
+        if not organization:
+            print(f"  ⚠️  Organization '{org}' not found, skipping team '{team_slug}'")
+            return []
+
+        team = organization.team_by_slug(team_slug)
+        if not team:
+            print(
+                f"  ⚠️  Team '{team_slug}' not found in '{org}', "
+                "skipping (check token permissions: read:org)"
+            )
+            return []
+
+        members = [m.login for m in team.members()]
+        print(f"  Resolved team {org}/{team_slug}: {len(members)} member(s)")
+        return members
+    except Exception as e:  # pylint: disable=broad-except
+        print(
+            f"  ⚠️  Error fetching team '{org}/{team_slug}': {e} "
+            "(check token permissions: read:org)"
+        )
+        return []
