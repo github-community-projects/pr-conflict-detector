@@ -45,14 +45,15 @@ def main():
                 f"Combined {len(env_vars.filter_authors)} FILTER_AUTHORS + "
                 f"team members = {len(combined_filter_authors)} unique author(s)"
             )
-        elif not combined_filter_authors:
-            print(
-                "  ⚠️  No valid teams resolved and no FILTER_AUTHORS set"
-                " — no author filtering will be applied"
-            )
         else:
             print(
                 f"Resolved {len(combined_filter_authors)} unique author(s) from teams"
+            )
+
+        if not combined_filter_authors and not env_vars.filter_authors:
+            print(
+                "  ⚠️  No valid teams resolved and no FILTER_AUTHORS set"
+                " — no author filtering will be applied"
             )
 
     # 3. Get repositories to scan
