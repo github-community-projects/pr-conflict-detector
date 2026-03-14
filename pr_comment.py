@@ -152,10 +152,11 @@ def _build_consolidated_comment(conflict_entries: list[dict[str, Any]]) -> str:
         if other.author not in authors:
             authors.append(other.author)
 
-        file_names = ", ".join(f"`{fo.filename}`" for fo in files)
-        line_ranges = ", ".join(_format_ranges(fo.overlapping_ranges) for fo in files)
+        file_details = ", ".join(
+            f"`{fo.filename}` ({_format_ranges(fo.overlapping_ranges)})" for fo in files
+        )
         table_rows.append(
-            f"| [#{other.number}]({other.url}) ({other.title}) | {file_names} | {line_ranges} |"
+            f"| [#{other.number}]({other.url}) ({other.title}) | {file_details} |"
         )
 
     table = "\n".join(table_rows)
@@ -166,8 +167,8 @@ def _build_consolidated_comment(conflict_entries: list[dict[str, Any]]) -> str:
 
 This PR may conflict with **{count}** other PR(s):
 
-| Conflicting PR | Conflicting Files | Overlapping Lines |
-|---|---|---|
+| Conflicting PR | Conflicting Files (Lines) |
+|---|---|
 {table}
 
 **What to do:** Review the overlapping changes and coordinate with {author_mentions} to resolve conflicts.

@@ -263,6 +263,9 @@ class TestBuildConsolidatedComment(unittest.TestCase):
         self.assertIn("@charlie", comment)
         self.assertIn("`file_a.rb`", comment)
         self.assertIn("`file_b.rb`", comment)
+        # Verify file-to-range attribution: each file's ranges appear next to the filename
+        self.assertIn("`file_a.rb` (L5-L15)", comment)
+        self.assertIn("`file_b.rb` (L30-L40)", comment)
 
 
 class TestGroupConflictsByPR(unittest.TestCase):
