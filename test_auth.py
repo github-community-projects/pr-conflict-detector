@@ -180,20 +180,20 @@ class TestGetTeamMembers(unittest.TestCase):
         member2.login = "bob"
         mock_team.members.return_value = [member1, member2]
 
-        mock_org.team_by_slug.return_value = mock_team
+        mock_org.team_by_name.return_value = mock_team
         mock_gh.organization.return_value = mock_org
 
         result = auth.get_team_members(mock_gh, "my-org", "my-team")
 
         self.assertEqual(result, ["alice", "bob"])
         mock_gh.organization.assert_called_once_with("my-org")
-        mock_org.team_by_slug.assert_called_once_with("my-team")
+        mock_org.team_by_name.assert_called_once_with("my-team")
 
     def test_get_team_members_team_not_found(self):
         """Test that a missing team returns an empty list."""
         mock_gh = MagicMock()
         mock_org = MagicMock()
-        mock_org.team_by_slug.return_value = None
+        mock_org.team_by_name.return_value = None
         mock_gh.organization.return_value = mock_org
 
         result = auth.get_team_members(mock_gh, "my-org", "nonexistent-team")
