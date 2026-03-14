@@ -137,7 +137,8 @@ def get_team_members(
             print(f"  ⚠️  Organization '{org}' not found, skipping team '{team_slug}'")
             return []
 
-        team = organization.team_by_slug(team_slug)
+        # team_by_name accepts a slug despite its name (hits /orgs/{org}/teams/{slug})
+        team = organization.team_by_name(team_slug)
         if not team:
             print(
                 f"  ⚠️  Team '{team_slug}' not found in '{org}', "
