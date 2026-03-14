@@ -77,6 +77,7 @@ class TestEnv(unittest.TestCase):
             slack_channel="#alerts",
             enable_github_actions_step_summary=False,
             enable_pr_comments=False,
+            enable_report_issues=True,
             filter_authors=[],
             filter_teams=[],
         )
@@ -115,6 +116,7 @@ class TestEnv(unittest.TestCase):
             filter_authors=[],
             filter_teams=[],
             enable_pr_comments=False,
+            enable_report_issues=True,
         )
         result = get_env_vars(True)
         self.assertEqual(result, expected_result)
@@ -151,6 +153,7 @@ class TestEnv(unittest.TestCase):
             filter_authors=[],
             filter_teams=[],
             enable_pr_comments=False,
+            enable_report_issues=True,
         )
         result = get_env_vars(True)
         self.assertEqual(result, expected_result)

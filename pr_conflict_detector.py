@@ -179,7 +179,9 @@ def main():
     write_to_json(all_conflicts, output_file=json_output)
 
     # Create/update issues in repos (all conflicts, not just new)
-    if not env_vars.dry_run:
+    if not env_vars.enable_report_issues:
+        print("Report issue creation disabled (ENABLE_REPORT_ISSUES=false)")
+    elif not env_vars.dry_run:
         for repo_full_name, conflicts in all_conflicts.items():
             owner, rname = repo_full_name.split("/")
             repo_obj = github_connection.repository(owner, rname)

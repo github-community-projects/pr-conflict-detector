@@ -107,6 +107,7 @@ The required GitHub App permissions under `Repository permissions` are:
 | `FILTER_AUTHORS`                     | False    | `""`                    | A comma-separated list of GitHub usernames. When set, only PRs authored by these users will be analyzed for conflicts. Useful for incremental rollout to specific teams. Example: `alice,bob,charlie`     |
 | `FILTER_TEAMS`                       | False    | `""`                    | A comma-separated list of GitHub teams (`org/team-slug`). Members are resolved at runtime and merged with `FILTER_AUTHORS`. Requires `read:org` scope. Example: `my-org/frontend,my-org/backend`          |
 | `ENABLE_PR_COMMENTS`                 | False    | `false`                 | If set to `true`, the action will post comments on PRs about detected conflicts. Comments include conflicting files, line ranges, and links to the other PR. See [PR Comments](#pr-comments) for details. |
+| `ENABLE_REPORT_ISSUES`               | False    | `true`                  | If set to `true`, the action will create/update conflict report issues in each repository. Set to `false` to disable issue creation while keeping PR comments and step summaries.                         |
 
 \*One of `ORGANIZATION` or `REPOSITORY` must be set.
 
