@@ -20,4 +20,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 
 ENV PYTHONUNBUFFERED=1
 CMD ["/action/workspace/pr_conflict_detector.py"]
-ENTRYPOINT ["uv", "run"]
+ENTRYPOINT ["uv", "run", "--project", "/action/workspace"]
