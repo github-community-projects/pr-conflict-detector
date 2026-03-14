@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import auth
+import github3
 import requests
 
 
@@ -217,6 +218,20 @@ class TestGetTeamMembers(unittest.TestCase):
         result = auth.get_team_members(mock_gh, "my-org", "my-team")
 
         self.assertEqual(result, [])
+
+    def test_team_by_name_exists_on_organization(self):
+        """Verify that github3.py Organization actually has team_by_name.
+
+        This guards against calling a method that doesn't exist on the real
+        class, which MagicMock would silently allow. See PR #25 for context:
+        the original code called team_by_slug which never existed in github3.py
+        v4.0.1, and MagicMock-based tests couldn't catch it.
+        """
+        self.assertTrue(
+            hasattr(github3.orgs.Organization, "team_by_name"),
+            "github3.orgs.Organization is missing team_by_name - "
+            "check github3.py version compatibility",
+        )
 
 
 if __name__ == "__main__":
