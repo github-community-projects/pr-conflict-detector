@@ -34,6 +34,7 @@ class EnvVars:  # pylint: disable=too-many-instance-attributes
     filter_authors: list[str]
     filter_teams: list[str]
     enable_pr_comments: bool
+    enable_report_issues: bool
 
 
 def get_bool_env_var(env_var_name: str, default: bool = False) -> bool:
@@ -186,6 +187,7 @@ def get_env_vars(test: bool = False) -> EnvVars:
             filter_teams.append(team)
 
     enable_pr_comments = get_bool_env_var("ENABLE_PR_COMMENTS")
+    enable_report_issues = get_bool_env_var("ENABLE_REPORT_ISSUES", default=True)
 
     return EnvVars(
         gh_app_id=gh_app_id,
@@ -209,4 +211,5 @@ def get_env_vars(test: bool = False) -> EnvVars:
         filter_authors=filter_authors,
         filter_teams=filter_teams,
         enable_pr_comments=enable_pr_comments,
+        enable_report_issues=enable_report_issues,
     )
