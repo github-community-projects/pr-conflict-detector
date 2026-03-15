@@ -403,7 +403,7 @@ class TestStaleCommentCleanup(unittest.TestCase):
             pr_comment.post_pr_comments(conflicts, gh, dry_run=True)
             log_messages = [str(c) for c in mock_logger.info.call_args_list]
             create_logs = [m for m in log_messages if "create" in m]
-            self.assertTrue(len(create_logs) > 0)
+            self.assertGreater(len(create_logs), 0)
 
     @patch("pr_comment._find_existing_comments")
     def test_dry_run_reports_updates(self, mock_find):
@@ -420,7 +420,7 @@ class TestStaleCommentCleanup(unittest.TestCase):
             pr_comment.post_pr_comments(conflicts, gh, dry_run=True)
             log_messages = [str(c) for c in mock_logger.info.call_args_list]
             update_logs = [m for m in log_messages if "update" in m]
-            self.assertTrue(len(update_logs) > 0)
+            self.assertGreater(len(update_logs), 0)
 
     @patch("pr_comment._find_existing_comments")
     def test_dry_run_reports_stale_cleanup(self, mock_find):
@@ -437,7 +437,7 @@ class TestStaleCommentCleanup(unittest.TestCase):
             pr_comment.post_pr_comments(conflicts, gh, dry_run=True)
             log_messages = [str(c) for c in mock_logger.info.call_args_list]
             stale_logs = [m for m in log_messages if "stale" in m]
-            self.assertTrue(len(stale_logs) > 0)
+            self.assertGreater(len(stale_logs), 0)
 
 
 class TestFormatRanges(unittest.TestCase):
