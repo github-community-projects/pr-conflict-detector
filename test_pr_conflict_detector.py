@@ -52,6 +52,7 @@ def _make_env_vars(**overrides):
         "filter_authors": [],
         "filter_teams": [],
         "enable_pr_comments": False,
+        "enable_report_issues": True,
     }
     defaults.update(overrides)
     return EnvVars(**defaults)
@@ -822,8 +823,84 @@ class TestSameAuthorConflictsFiltered(unittest.TestCase):
         self.assertEqual(written_conflicts["test-org/repo-a"][0], diff_author_conflict)
 
 
-if __name__ == "__main__":
-    unittest.main()
+@patch("pr_conflict_detector.deduplication", new=_mock_dedup_passthrough())
+@patch("pr_conflict_detector.send_slack_notification")
+@patch("pr_conflict_detector.create_or_update_issue")
+@patch("pr_conflict_detector.write_to_json")
+@patch("pr_conflict_detector.write_to_markdown")
+@patch("pr_conflict_detector.detect_conflicts")
+@patch("pr_conflict_detector.fetch_all_pr_data")
+@patch("pr_conflict_detector.auth.auth_to_github")
+@patch("pr_conflict_detector.env.get_env_vars")
+class TestEnableReportIssues(unittest.TestCase):
+    """Test the ENABLE_REPORT_ISSUES flag."""
+
+    def test_issues_not_created_when_disabled(
+        self,
+        mock_get_env,
+        mock_auth,
+        mock_fetch,
+        mock_detect,
+        mock_md,
+        mock_json,
+        mock_issue,
+        _mock_slack,
+    ):
+        """Verify issues are NOT created when ENABLE_REPORT_ISSUES is false."""
+        repo = _make_repo("test-org/repo-a")
+        env_vars = _make_env_vars(enable_report_issues=False)
+        mock_get_env.return_value = env_vars
+
+        gh = MagicMock()
+        mock_auth.return_value = gh
+        org_mock = MagicMock()
+        org_mock.repositories.return_value = [repo]
+        gh.organization.return_value = org_mock
+
+        pr1, pr2 = _make_pr(1), _make_pr(2)
+        mock_fetch.return_value = [pr1, pr2]
+        conflict = MagicMock()
+        mock_detect.return_value = [conflict]
+
+        main()
+
+        mock_md.assert_called_once()
+        mock_json.assert_called_once()
+        mock_issue.assert_not_called()
+
+    def test_issues_created_when_enabled(
+        self,
+        mock_get_env,
+        mock_auth,
+        mock_fetch,
+        mock_detect,
+        mock_md,
+        mock_json,
+        mock_issue,
+        _mock_slack,
+    ):
+        """Verify issues ARE created when ENABLE_REPORT_ISSUES is true (default)."""
+        repo = _make_repo("test-org/repo-a")
+        env_vars = _make_env_vars(enable_report_issues=True)
+        mock_get_env.return_value = env_vars
+
+        gh = MagicMock()
+        mock_auth.return_value = gh
+        org_mock = MagicMock()
+        org_mock.repositories.return_value = [repo]
+        gh.organization.return_value = org_mock
+
+        pr1, pr2 = _make_pr(1), _make_pr(2)
+        mock_fetch.return_value = [pr1, pr2]
+        conflict = MagicMock()
+        mock_detect.return_value = [conflict]
+        mock_issue.return_value = "https://github.com/test-org/repo-a/issues/99"
+
+        main()
+
+        mock_md.assert_called_once()
+        mock_json.assert_called_once()
+        mock_issue.assert_called_once()
 
 
 if __name__ == "__main__":
