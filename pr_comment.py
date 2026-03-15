@@ -2,14 +2,23 @@
 
 import logging
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import Any
 
-from conflict_detector import ConflictResult
+from conflict_detector import ConflictResult, FileOverlap, PRInfo
 
 logger = logging.getLogger(__name__)
 
 # Bot signature to identify our comments
 COMMENT_SIGNATURE = "<!-- pr-conflict-detector-bot -->"
+
+
+@dataclass
+class ConflictEntry:
+    """A single conflict entry for a PR, pairing the other PR with overlapping files."""
+
+    other_pr: PRInfo
+    files: list[FileOverlap]
 
 
 def post_pr_comments(
@@ -52,23 +61,39 @@ def post_pr_comments(
         for pr_number, conflict_entries in pr_conflicts.items():
             comment_body = _build_consolidated_comment(conflict_entries)
 
+            existing_comments = _find_existing_comments(repo_obj, pr_number)
+
             if dry_run:
+                action = "update" if existing_comments else "create"
                 logger.info(
-                    "DRY RUN: Would comment on %s#%s:\n%s",
+                    "DRY RUN: Would %s comment on %s#%s:\n%s",
+                    action,
                     repo_name,
                     pr_number,
                     comment_body,
                 )
-                total_comments += 1
+                if existing_comments:
+                    total_updates += 1
+                    if len(existing_comments) > 1:
+                        logger.info(
+                            "DRY RUN: Would delete %s stale bot comment(s) on %s#%s",
+                            len(existing_comments) - 1,
+                            repo_name,
+                            pr_number,
+                        )
+                else:
+                    total_comments += 1
                 continue
 
-            existing_comment = _find_existing_comment(repo_obj, pr_number)
-            if existing_comment is not None:
-                success = _update_comment(existing_comment, comment_body)
+            if existing_comments:
+                success = _update_comment(existing_comments[0], comment_body)
                 if success:
                     total_updates += 1
                 else:
                     all_success = False
+                # Clean up any stale extra bot comments (e.g. old per-conflict format)
+                for stale_comment in existing_comments[1:]:
+                    _delete_comment(stale_comment)
             else:
                 success = _post_comment(repo_obj, pr_number, comment_body)
                 if success:
@@ -88,7 +113,7 @@ def post_pr_comments(
 
 def _group_conflicts_by_pr(
     conflicts: list[ConflictResult],
-) -> dict[int, list[dict[str, Any]]]:
+) -> dict[int, list[ConflictEntry]]:
     """Group conflicts so each PR number maps to its list of conflicting PRs.
 
     Each conflict pair contributes an entry to both PRs involved.
@@ -97,47 +122,46 @@ def _group_conflicts_by_pr(
         conflicts: List of ConflictResult objects.
 
     Returns:
-        Dict mapping PR number to a list of dicts, each with keys
-        "other_pr" (PRInfo) and "files" (list of FileOverlap).
+        Dict mapping PR number to a list of ConflictEntry objects.
     """
-    grouped: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    grouped: dict[int, list[ConflictEntry]] = defaultdict(list)
     for conflict in conflicts:
         grouped[conflict.pr_a.number].append(
-            {"other_pr": conflict.pr_b, "files": conflict.conflicting_files}
+            ConflictEntry(other_pr=conflict.pr_b, files=conflict.conflicting_files)
         )
         grouped[conflict.pr_b.number].append(
-            {"other_pr": conflict.pr_a, "files": conflict.conflicting_files}
+            ConflictEntry(other_pr=conflict.pr_a, files=conflict.conflicting_files)
         )
     return dict(grouped)
 
 
-def _find_existing_comment(repo, pr_number: int):
-    """Find an existing bot comment on the PR.
+def _find_existing_comments(repo: Any, pr_number: int) -> list[Any]:
+    """Find all existing bot comments on the PR.
+
+    Returns all comments matching the bot signature, ordered by creation time.
+    The first element (if any) is the one to update; the rest are stale and
+    should be deleted during migration from per-conflict to consolidated format.
 
     Args:
         repo: GitHub repository object
         pr_number: PR number to check
 
     Returns:
-        The comment object if found, None otherwise
+        List of comment objects with the bot signature (may be empty).
     """
     try:
         pr = repo.pull_request(pr_number)
-        for comment in pr.issue_comments():
-            if COMMENT_SIGNATURE in comment.body:
-                return comment
-        return None
+        return [c for c in pr.issue_comments() if COMMENT_SIGNATURE in c.body]
     except Exception as e:  # pylint: disable=broad-except
         logger.warning("Failed to check existing comments on PR #%s: %s", pr_number, e)
-        return None
+        return []
 
 
-def _build_consolidated_comment(conflict_entries: list[dict[str, Any]]) -> str:
+def _build_consolidated_comment(conflict_entries: list[ConflictEntry]) -> str:
     """Build a single consolidated comment listing all conflicts for a PR.
 
     Args:
-        conflict_entries: List of dicts with "other_pr" (PRInfo) and
-            "files" (list of FileOverlap).
+        conflict_entries: List of ConflictEntry objects.
 
     Returns:
         Formatted comment body with a table of all conflicting PRs.
@@ -147,16 +171,15 @@ def _build_consolidated_comment(conflict_entries: list[dict[str, Any]]) -> str:
     table_rows = []
     authors: list[str] = []
     for entry in conflict_entries:
-        other = entry["other_pr"]
-        files = entry["files"]
-        if other.author not in authors:
-            authors.append(other.author)
+        if entry.other_pr.author not in authors:
+            authors.append(entry.other_pr.author)
 
         file_details = ", ".join(
-            f"`{fo.filename}` ({_format_ranges(fo.overlapping_ranges)})" for fo in files
+            f"`{fo.filename}` ({_format_ranges(fo.overlapping_ranges)})"
+            for fo in entry.files
         )
         table_rows.append(
-            f"| [#{other.number}]({other.url}) ({other.title}) | {file_details} |"
+            f"| [#{entry.other_pr.number}]({entry.other_pr.url}) ({entry.other_pr.title}) | {file_details} |"
         )
 
     table = "\n".join(table_rows)
@@ -190,7 +213,7 @@ def _format_ranges(ranges: list[tuple[int, int]]) -> str:
     return ", ".join(f"L{start}-L{end}" for start, end in ranges)
 
 
-def _update_comment(comment, body: str) -> bool:
+def _update_comment(comment: Any, body: str) -> bool:
     """Update an existing comment with new content.
 
     Args:
@@ -206,6 +229,27 @@ def _update_comment(comment, body: str) -> bool:
         return True
     except Exception as e:  # pylint: disable=broad-except
         logger.error("Failed to update comment (id=%s): %s", comment.id, e)
+        return False
+
+
+def _delete_comment(comment: Any) -> bool:
+    """Delete a stale bot comment.
+
+    Used during migration from per-conflict to consolidated comment format
+    to clean up extra bot comments that are no longer needed.
+
+    Args:
+        comment: GitHub comment object to delete
+
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        comment.delete()
+        logger.info("Deleted stale bot comment (id=%s)", comment.id)
+        return True
+    except Exception as e:  # pylint: disable=broad-except
+        logger.warning("Failed to delete stale comment (id=%s): %s", comment.id, e)
         return False
 
 
