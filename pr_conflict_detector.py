@@ -154,16 +154,30 @@ def main():
     else:
         print("DRY RUN: Skipping state file save")
 
+    # Detect state rebuild: if state was empty and has no last_run marker,
+    # this is either a first run or a cache eviction. Suppress notifications
+    # to avoid a blast of alerts for all existing conflicts.
+    state_was_empty = len(state.get("conflicts", [])) == 0
+    has_run_before = "last_run" in state
+    suppress_notifications = state_was_empty and not has_run_before
+
+    if suppress_notifications:
+        print(
+            "No prior state found — rebuilding state, "
+            "skipping notifications this run"
+        )
+
     # Conflicts to notify about (new + changed)
     notify_conflicts: dict[str, list] = {}
-    for conflict in dedup_result.new_conflicts + dedup_result.changed_conflicts:
-        # Find which repo this conflict belongs to
-        for repo_name, conflicts in all_conflicts.items():
-            if conflict in conflicts:
-                if repo_name not in notify_conflicts:
-                    notify_conflicts[repo_name] = []
-                notify_conflicts[repo_name].append(conflict)
-                break
+    if not suppress_notifications:
+        for conflict in dedup_result.new_conflicts + dedup_result.changed_conflicts:
+            # Find which repo this conflict belongs to
+            for repo_name, conflicts in all_conflicts.items():
+                if conflict in conflicts:
+                    if repo_name not in notify_conflicts:
+                        notify_conflicts[repo_name] = []
+                    notify_conflicts[repo_name].append(conflict)
+                    break
 
     # 6. Generate outputs
     # Write markdown report (always generated, full results)

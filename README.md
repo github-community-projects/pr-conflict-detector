@@ -261,7 +261,7 @@ When `VERIFY_CONFLICTS` is set to `true`, the action uses GitHub's API to attemp
 
 ## Deduplication and alert fatigue prevention
 
-The action tracks conflict history in a `.pr-conflict-state.json` file committed to your repository. This prevents alert fatigue by only notifying about new or changed conflicts.
+The action tracks conflict history in a `.pr-conflict-state.json` state file. This prevents alert fatigue by only notifying about new or changed conflicts.
 
 ### How it works - details
 
@@ -299,12 +299,101 @@ Conflicts where both PRs are authored by the same person are automatically filte
 
 ### State file management
 
-- **Location:** `.pr-conflict-state.json` in the repository root
-- **Format:** JSON with conflict fingerprints
-- **Persistence:** Committed to the repository after each run
+- **Location:** `.pr-conflict-state.json` in the workspace
+- **Format:** JSON with conflict fingerprints and a `last_run` timestamp
+- **Atomic writes:** The state file is written atomically (via temp file + rename) to prevent corruption if the action is interrupted
 - **Dry run:** When `DRY_RUN=true`, the state file is not modified
 
-The state file is automatically managed by the action - no manual intervention required.
+#### Persisting state across runs
+
+The action writes the state file to the workspace during each run. To preserve state between runs (required for deduplication to work), you need to persist the file using one of the strategies below.
+
+> **Important:** If state is lost (e.g., cache eviction, first run), the action automatically detects this and suppresses notifications for that run while rebuilding state. This prevents a flood of duplicate alerts. On the next run, notifications resume normally.
+
+#### Option 1: GitHub Actions cache (recommended)
+
+The simplest and most compatible approach. Works with any branch protection configuration and requires no special permissions.
+
+```yaml
+permissions: {}  # no special permissions needed
+
+steps:
+  - name: Restore conflict state
+    uses: actions/cache/restore@v4
+    with:
+      path: .pr-conflict-state.json
+      key: pr-conflict-state-${{ github.run_id }}
+      restore-keys: pr-conflict-state-
+
+  - name: Detect PR Conflicts
+    id: detect
+    uses: github-community-projects/pr-conflict-detector@v1
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      ORGANIZATION: "my-org"
+
+  - name: Save conflict state
+    if: steps.detect.outcome == 'success'
+    uses: actions/cache/save@v4
+    with:
+      path: .pr-conflict-state.json
+      key: pr-conflict-state-${{ github.run_id }}
+```
+
+**How it works:**
+- `restore-keys` prefix matching always finds the most recent saved state
+- Each run saves with a unique key (`run_id`), so entries are never overwritten
+- Old entries are evicted automatically by LRU within GitHub's 10GB cache limit
+
+**Note:** GitHub evicts cache entries not accessed within 7 days. If your workflow only triggers infrequently (e.g., on push to the default branch), state may be lost during quiet periods. For reliable deduplication, use a scheduled trigger:
+
+```yaml
+on:
+  schedule:
+    - cron: "0,30 * * * 1-5"  # every 30 min on weekdays
+```
+
+#### Option 2: Git commit-back
+
+Commit the state file directly to the repository. This makes state visible in git history and avoids cache eviction concerns, but requires the workflow to have push access to the target branch.
+
+```yaml
+permissions:
+  contents: write
+
+steps:
+  - name: Checkout repository
+    uses: actions/checkout@v4
+
+  - name: Detect PR Conflicts
+    id: detect
+    uses: github-community-projects/pr-conflict-detector@v1
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      ORGANIZATION: "my-org"
+
+  - name: Commit state file
+    if: steps.detect.outcome == 'success'
+    run: |
+      if [ -f .pr-conflict-state.json ]; then
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add .pr-conflict-state.json
+        if ! git diff --staged --quiet; then
+          git commit -m "chore: update pr-conflict-detector state [skip ci]"
+          git push
+        fi
+      fi
+```
+
+**⚠️ Limitations:**
+- **Branch protection:** Repositories with required PR reviews will block the push unless `github-actions[bot]` is added to the bypass list
+- **Permissions:** Requires `contents: write`, which may not be acceptable for security-conscious organizations
+- **Race conditions:** Concurrent runs may conflict on push if one takes longer than the schedule interval
+
+#### Option 3: No persistence
+
+If you don't need deduplication (e.g., you only run the action on-demand via `workflow_dispatch`), you can skip state persistence entirely. The action will treat every detected conflict as new and send notifications for all of them on each run.
 
 ## Slack integration
 

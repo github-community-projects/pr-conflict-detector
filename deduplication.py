@@ -56,18 +56,29 @@ def load_state(repo_path: str = ".") -> dict[str, Any]:
 
 
 def save_state(state: dict[str, Any], repo_path: str = ".") -> None:
-    """Save the conflict state file to the repository.
+    """Save the conflict state file to the repository using atomic writes.
+
+    Writes to a temporary file first, then atomically renames it to the
+    target path. This prevents partial/corrupt state files if the process
+    is interrupted mid-write (e.g., job cancellation, timeout).
 
     Args:
         state: State dictionary with 'conflicts' list.
         repo_path: Path to the repository root.
     """
     state_path = os.path.join(repo_path, STATE_FILE)
+    tmp_path = state_path + ".tmp"
     try:
-        with open(state_path, "w", encoding="utf-8") as f:
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2)
+        os.replace(tmp_path, state_path)  # atomic on POSIX
     except OSError as e:
         print(f"Warning: Failed to save state file: {e}")
+        # Clean up partial temp file if it exists
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
 
 
 def prune_expired_conflicts(
@@ -205,7 +216,7 @@ def update_state_with_current(
         state: Existing state dictionary.
 
     Returns:
-        Updated state dictionary.
+        Updated state dictionary with 'conflicts' list and 'last_run' timestamp.
     """
     # Build lookup of existing timestamps
     existing_timestamps: dict[tuple[str, int, int], str] = {}
@@ -224,4 +235,7 @@ def update_state_with_current(
             fp = conflict_to_fingerprint(conflict, repo, timestamp)
             new_fingerprints.append(fingerprint_to_dict(fp))
 
-    return {"conflicts": new_fingerprints}
+    return {
+        "conflicts": new_fingerprints,
+        "last_run": datetime.now(timezone.utc).isoformat(),
+    }

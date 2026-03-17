@@ -1,5 +1,7 @@
 """Tests for the main PR conflict detector orchestrator."""
 
+# pylint: disable=too-many-lines
+
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -15,8 +17,14 @@ class _BaseIntegrationTest:
 
     def setup_dedup_mock(self, mock_dedup, conflicts):
         """Configure deduplication mock to pass through all conflicts as new."""
-        mock_dedup.load_state.return_value = {"conflicts": []}
-        mock_dedup.prune_expired_conflicts.return_value = {"conflicts": []}
+        mock_dedup.load_state.return_value = {
+            "conflicts": [],
+            "last_run": "2026-01-01T00:00:00+00:00",
+        }
+        mock_dedup.prune_expired_conflicts.return_value = {
+            "conflicts": [],
+            "last_run": "2026-01-01T00:00:00+00:00",
+        }
 
         dedup_result = MagicMock()
         dedup_result.new_conflicts = conflicts
@@ -82,10 +90,21 @@ def _make_pr(number, title="PR title", author="dev"):
 
 
 def _mock_dedup_passthrough():
-    """Create a mock deduplication module that passes conflicts through."""
+    """Create a mock deduplication module that passes conflicts through.
+
+    Note: load_state returns state WITH last_run to simulate a normal run
+    (not a first run / cache eviction). Tests that need to verify suppression
+    behavior should use their own dedup mock without last_run.
+    """
     mock = MagicMock()
-    mock.load_state.return_value = {"conflicts": []}
-    mock.prune_expired_conflicts.return_value = {"conflicts": []}
+    mock.load_state.return_value = {
+        "conflicts": [],
+        "last_run": "2026-01-01T00:00:00+00:00",
+    }
+    mock.prune_expired_conflicts.return_value = {
+        "conflicts": [],
+        "last_run": "2026-01-01T00:00:00+00:00",
+    }
 
     def compare_conflicts_side_effect(
         current_conflicts, state
@@ -414,9 +433,15 @@ class TestDryRunSkipsIssues(unittest.TestCase):
         env_vars = _make_env_vars(dry_run=True)
         mock_get_env.return_value = env_vars
 
-        # Setup deduplication mock
-        mock_dedup.load_state.return_value = {"conflicts": []}
-        mock_dedup.prune_expired_conflicts.return_value = {"conflicts": []}
+        # Setup deduplication mock (with last_run to avoid suppression)
+        mock_dedup.load_state.return_value = {
+            "conflicts": [],
+            "last_run": "2026-01-01T00:00:00+00:00",
+        }
+        mock_dedup.prune_expired_conflicts.return_value = {
+            "conflicts": [],
+            "last_run": "2026-01-01T00:00:00+00:00",
+        }
         dedup_result = MagicMock()
         dedup_result.new_conflicts = [MagicMock()]
         dedup_result.changed_conflicts = []
@@ -905,3 +930,221 @@ class TestEnableReportIssues(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Notification suppression tests (state rebuild detection)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@patch("pr_conflict_detector.deduplication")
+@patch("pr_conflict_detector.post_pr_comments")
+@patch("pr_conflict_detector.send_slack_notification")
+@patch("pr_conflict_detector.create_or_update_issue")
+@patch("pr_conflict_detector.write_to_json")
+@patch("pr_conflict_detector.write_to_markdown")
+@patch("pr_conflict_detector.detect_conflicts")
+@patch("pr_conflict_detector.fetch_all_pr_data")
+@patch("pr_conflict_detector.auth.auth_to_github")
+@patch("pr_conflict_detector.env.get_env_vars")
+class TestNotificationSuppression(unittest.TestCase):
+    """Test that notifications are suppressed on state rebuild (first run / cache eviction)."""
+
+    def _setup_mocks(
+        self,
+        mock_get_env,
+        mock_auth,
+        mock_fetch,
+        mock_detect,
+        mock_dedup,
+        *,
+        state,
+        enable_pr_comments=True,
+    ):
+        """Common mock setup for suppression tests."""
+        env_vars = _make_env_vars(enable_pr_comments=enable_pr_comments)
+        mock_get_env.return_value = env_vars
+
+        mock_dedup.load_state.return_value = state
+        mock_dedup.prune_expired_conflicts.return_value = state
+
+        # All conflicts are "new" (worst case for suppression testing)
+        conflict = MagicMock()
+        dedup_result = MagicMock()
+        dedup_result.new_conflicts = [conflict]
+        dedup_result.changed_conflicts = []
+        dedup_result.unchanged_conflicts = []
+        dedup_result.resolved_fingerprints = []
+        mock_dedup.compare_conflicts.return_value = dedup_result
+        mock_dedup.update_state_with_current.return_value = {
+            "conflicts": [],
+            "last_run": "2026-03-17T00:00:00+00:00",
+        }
+
+        gh = MagicMock()
+        mock_auth.return_value = gh
+        repo = _make_repo("test-org/repo-a")
+        org_mock = MagicMock()
+        org_mock.repositories.return_value = [repo]
+        gh.organization.return_value = org_mock
+
+        mock_fetch.return_value = [_make_pr(1), _make_pr(2)]
+        mock_detect.return_value = [conflict]
+
+        return conflict
+
+    def test_suppressed_when_no_state_and_no_last_run(
+        self,
+        mock_get_env,
+        mock_auth,
+        mock_fetch,
+        mock_detect,
+        _mock_md,
+        _mock_json,
+        _mock_issue,
+        mock_slack,
+        mock_pr_comments,
+        mock_dedup,
+    ):
+        """First run or cache eviction: empty state + no last_run → no notifications."""
+        self._setup_mocks(
+            mock_get_env,
+            mock_auth,
+            mock_fetch,
+            mock_detect,
+            mock_dedup,
+            state={"conflicts": []},  # No last_run key
+        )
+
+        main()
+
+        mock_slack.assert_not_called()
+        mock_pr_comments.assert_not_called()
+        # State should still be saved
+        mock_dedup.save_state.assert_called_once()
+
+    def test_not_suppressed_when_state_has_last_run(
+        self,
+        mock_get_env,
+        mock_auth,
+        mock_fetch,
+        mock_detect,
+        _mock_md,
+        _mock_json,
+        _mock_issue,
+        mock_slack,
+        mock_pr_comments,
+        mock_dedup,
+    ):
+        """Normal run with last_run in state → notifications sent."""
+        self._setup_mocks(
+            mock_get_env,
+            mock_auth,
+            mock_fetch,
+            mock_detect,
+            mock_dedup,
+            state={"conflicts": [], "last_run": "2026-03-15T10:00:00+00:00"},
+        )
+
+        main()
+
+        mock_slack.assert_called_once()
+        mock_pr_comments.assert_called_once()
+
+    def test_not_suppressed_when_state_has_conflicts_no_last_run(
+        self,
+        mock_get_env,
+        mock_auth,
+        mock_fetch,
+        mock_detect,
+        _mock_md,
+        _mock_json,
+        _mock_issue,
+        mock_slack,
+        mock_pr_comments,
+        mock_dedup,
+    ):
+        """Old state file with conflicts but no last_run → not suppressed (backward compat)."""
+        self._setup_mocks(
+            mock_get_env,
+            mock_auth,
+            mock_fetch,
+            mock_detect,
+            mock_dedup,
+            state={
+                "conflicts": [
+                    {
+                        "repo": "org/repo",
+                        "pr_a": 10,
+                        "pr_b": 20,
+                        "files": ["f.py"],
+                        "first_seen": "2026-01-01T00:00:00+00:00",
+                    }
+                ]
+            },  # Has conflicts but no last_run (pre-upgrade state file)
+        )
+
+        main()
+
+        mock_slack.assert_called_once()
+        mock_pr_comments.assert_called_once()
+
+    def test_suppressed_still_saves_state(
+        self,
+        mock_get_env,
+        mock_auth,
+        mock_fetch,
+        mock_detect,
+        _mock_md,
+        _mock_json,
+        _mock_issue,
+        _mock_slack,
+        _mock_pr_comments,
+        mock_dedup,
+    ):
+        """Even when suppressed, state and reports are still generated."""
+        self._setup_mocks(
+            mock_get_env,
+            mock_auth,
+            mock_fetch,
+            mock_detect,
+            mock_dedup,
+            state={"conflicts": []},
+        )
+
+        main()
+
+        # State is saved (so next run has last_run)
+        mock_dedup.save_state.assert_called_once()
+        # Reports are still written
+        _mock_md.assert_called_once()
+        _mock_json.assert_called_once()
+
+    def test_suppressed_does_not_skip_pr_comments_when_disabled(
+        self,
+        mock_get_env,
+        mock_auth,
+        mock_fetch,
+        mock_detect,
+        _mock_md,
+        _mock_json,
+        _mock_issue,
+        mock_slack,
+        mock_pr_comments,
+        mock_dedup,
+    ):
+        """PR comments disabled + suppressed → pr_comments not called regardless."""
+        self._setup_mocks(
+            mock_get_env,
+            mock_auth,
+            mock_fetch,
+            mock_detect,
+            mock_dedup,
+            state={"conflicts": []},
+            enable_pr_comments=False,
+        )
+
+        main()
+
+        mock_slack.assert_not_called()
+        mock_pr_comments.assert_not_called()
