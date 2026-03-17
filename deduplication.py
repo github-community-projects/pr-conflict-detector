@@ -78,6 +78,7 @@ def save_state(state: dict[str, Any], repo_path: str = ".") -> None:
         try:
             os.remove(tmp_path)
         except OSError:
+            # Best-effort cleanup; safe to ignore if temp file is already gone
             pass
 
 
