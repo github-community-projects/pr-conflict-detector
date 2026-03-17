@@ -125,7 +125,6 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
   issues: write
   pull-requests: write
 
@@ -134,13 +133,28 @@ jobs:
     name: Detect PR conflicts
     runs-on: ubuntu-latest
     steps:
+      - name: Restore conflict state
+        uses: actions/cache/restore@v4
+        with:
+          path: .pr-conflict-state.json
+          key: pr-conflict-state-${{ github.run_id }}
+          restore-keys: pr-conflict-state-
+
       - name: Detect PR Conflicts
+        id: detect
         uses: github-community-projects/pr-conflict-detector@v1
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           ORGANIZATION: my-org
           INCLUDE_DRAFTS: "true"
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Save conflict state
+        if: steps.detect.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: .pr-conflict-state.json
+          key: pr-conflict-state-${{ github.run_id }}
 ```
 
 #### Single repository
@@ -153,7 +167,6 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
   issues: write
   pull-requests: write
 
@@ -162,11 +175,26 @@ jobs:
     name: Detect PR conflicts
     runs-on: ubuntu-latest
     steps:
+      - name: Restore conflict state
+        uses: actions/cache/restore@v4
+        with:
+          path: .pr-conflict-state.json
+          key: pr-conflict-state-${{ github.run_id }}
+          restore-keys: pr-conflict-state-
+
       - name: Detect PR Conflicts
+        id: detect
         uses: github-community-projects/pr-conflict-detector@v1
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           REPOSITORY: owner/repo-name
+
+      - name: Save conflict state
+        if: steps.detect.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: .pr-conflict-state.json
+          key: pr-conflict-state-${{ github.run_id }}
 ```
 
 #### Multiple repositories with GitHub App authentication
@@ -179,7 +207,6 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
   issues: write
   pull-requests: write
 
@@ -188,7 +215,15 @@ jobs:
     name: Detect PR conflicts
     runs-on: ubuntu-latest
     steps:
+      - name: Restore conflict state
+        uses: actions/cache/restore@v4
+        with:
+          path: .pr-conflict-state.json
+          key: pr-conflict-state-${{ github.run_id }}
+          restore-keys: pr-conflict-state-
+
       - name: Detect PR Conflicts
+        id: detect
         uses: github-community-projects/pr-conflict-detector@v1
         env:
           GH_APP_ID: ${{ secrets.GH_APP_ID }}
@@ -197,6 +232,13 @@ jobs:
           REPOSITORY: "owner/repo1,owner/repo2,owner/repo3"
           EXEMPT_REPOS: "owner/repo-to-skip"
           VERIFY_CONFLICTS: "true"
+
+      - name: Save conflict state
+        if: steps.detect.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: .pr-conflict-state.json
+          key: pr-conflict-state-${{ github.run_id }}
 ```
 
 #### Incremental rollout to a specific team
@@ -211,7 +253,6 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
   issues: write
   pull-requests: write
 
@@ -220,13 +261,28 @@ jobs:
     name: Detect PR conflicts
     runs-on: ubuntu-latest
     steps:
+      - name: Restore conflict state
+        uses: actions/cache/restore@v4
+        with:
+          path: .pr-conflict-state.json
+          key: pr-conflict-state-${{ github.run_id }}
+          restore-keys: pr-conflict-state-
+
       - name: Detect PR Conflicts
+        id: detect
         uses: github-community-projects/pr-conflict-detector@v1
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           REPOSITORY: my-org/company-monolith
           FILTER_TEAMS: "my-org/frontend-team,my-org/backend-team"
           DRY_RUN: "true"
+
+      - name: Save conflict state
+        if: steps.detect.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: .pr-conflict-state.json
+          key: pr-conflict-state-${{ github.run_id }}
 ```
 
 You can also combine `FILTER_TEAMS` with `FILTER_AUTHORS` — the members are merged (union):
