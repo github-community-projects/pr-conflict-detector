@@ -315,7 +315,7 @@ The action writes the state file to the workspace during each run. To preserve s
 The simplest and most compatible approach. Works with any branch protection configuration and requires no special permissions.
 
 ```yaml
-permissions: {}  # no special permissions needed
+permissions: {} # no special permissions needed
 
 steps:
   - name: Restore conflict state
@@ -341,6 +341,7 @@ steps:
 ```
 
 **How it works:**
+
 - `restore-keys` prefix matching always finds the most recent saved state
 - Each run saves with a unique key (`run_id`), so entries are never overwritten
 - Old entries are evicted automatically by LRU within GitHub's 10GB cache limit
@@ -350,7 +351,7 @@ steps:
 ```yaml
 on:
   schedule:
-    - cron: "0,30 * * * 1-5"  # every 30 min on weekdays
+    - cron: "0,30 * * * 1-5" # every 30 min on weekdays
 ```
 
 #### Option 2: Git commit-back
@@ -387,6 +388,7 @@ steps:
 ```
 
 **⚠️ Limitations:**
+
 - **Branch protection:** Repositories with required PR reviews will block the push unless `github-actions[bot]` is added to the bypass list
 - **Permissions:** Requires `contents: write`, which may not be acceptable for security-conscious organizations
 - **Race conditions:** Concurrent runs may conflict on push if one takes longer than the schedule interval
