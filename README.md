@@ -420,7 +420,7 @@ concurrency:
   cancel-in-progress: false
 ```
 
-With `cancel-in-progress: false`, the queued run waits for the current run to finish and save its state. When the queued run starts, it restores the freshly saved state and deduplicates correctly. GitHub automatically cancels the oldest pending run if a third one queues, so at most one run is waiting at any time.
+With `cancel-in-progress: false`, the queued run waits for the current run to finish and save its state. When the queued run starts, it restores the freshly saved state and deduplicates correctly. If runs consistently exceed the schedule interval, the queue won't grow unbounded — GitHub automatically cancels the oldest pending run when a third one enters the queue, so at most one run is waiting at any time. This means the system self-regulates: one run is active, one is queued, and any additional triggers are dropped.
 
 #### Option 2: Git commit-back
 
