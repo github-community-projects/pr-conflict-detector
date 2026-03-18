@@ -1,6 +1,7 @@
 """Tests for the deduplication module."""
 
 import json
+import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -87,12 +88,60 @@ class TestLoadAndSaveState(unittest.TestCase):
                 loaded = json.load(f)
             self.assertEqual(loaded["conflicts"][0]["pr_a"], 1)
 
+    def test_save_state_atomic_no_temp_file_left(self):
+        """After a successful save, no .tmp file should remain."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state = {"conflicts": []}
+            deduplication.save_state(state, tmpdir)
+
+            tmp_file = Path(tmpdir) / ".pr-conflict-state.json.tmp"
+            self.assertFalse(tmp_file.exists())
+
+            state_file = Path(tmpdir) / ".pr-conflict-state.json"
+            self.assertTrue(state_file.exists())
+
+    def test_save_state_atomic_replaces_existing(self):
+        """Atomic save should replace an existing state file."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / ".pr-conflict-state.json"
+            # Write initial state
+            with open(state_file, "w", encoding="utf-8") as f:
+                json.dump({"conflicts": [], "last_run": "old"}, f)
+
+            # Save new state
+            new_state = {
+                "conflicts": [
+                    {
+                        "repo": "org/repo",
+                        "pr_a": 1,
+                        "pr_b": 2,
+                        "files": ["f.py"],
+                        "first_seen": "2026-01-01T00:00:00+00:00",
+                    }
+                ]
+            }
+            deduplication.save_state(new_state, tmpdir)
+
+            with open(state_file, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+            self.assertEqual(len(loaded["conflicts"]), 1)
+
     def test_save_state_permission_error(self):
         """Save to unwritable path should print warning."""
         state = {"conflicts": []}
         # Try to save to a path that doesn't exist
         deduplication.save_state(state, "/nonexistent/path")
         # Should not raise, just print warning
+
+    def test_save_state_permission_error_cleans_tmp(self):
+        """Save failure should attempt to clean up temp file."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state = {"conflicts": []}
+            # Saving to a nonexistent subdirectory should fail
+            deduplication.save_state(state, os.path.join(tmpdir, "nonexistent"))
+            # No temp files should be left in tmpdir
+            tmp_file = Path(tmpdir) / "nonexistent" / ".pr-conflict-state.json.tmp"
+            self.assertFalse(tmp_file.exists())
 
 
 class TestPruneExpiredConflicts(unittest.TestCase):
@@ -325,6 +374,107 @@ class TestUpdateStateWithCurrent(unittest.TestCase):
 
         self.assertEqual(updated["conflicts"][0]["files"], ["new.py"])
         self.assertEqual(updated["conflicts"][0]["first_seen"], original_time)
+
+    def test_update_state_includes_last_run(self):
+        """Updated state should include a last_run timestamp."""
+        state = {"conflicts": []}
+        conflicts = {"org/repo": [_make_conflict(1, 2, ["file.py"])]}
+        updated = deduplication.update_state_with_current(conflicts, state)
+
+        self.assertIn("last_run", updated)
+        # Should be a valid ISO timestamp
+        datetime.fromisoformat(updated["last_run"])
+
+    def test_update_state_last_run_is_recent(self):
+        """last_run timestamp should be close to current time."""
+        state = {"conflicts": []}
+        conflicts = {}
+        before = datetime.now(timezone.utc)
+        updated = deduplication.update_state_with_current(conflicts, state)
+        after = datetime.now(timezone.utc)
+
+        last_run = datetime.fromisoformat(updated["last_run"])
+        self.assertGreaterEqual(last_run, before)
+        self.assertLessEqual(last_run, after)
+
+
+class TestBackwardCompatibility(unittest.TestCase):
+    """Test backward compatibility with state files missing last_run."""
+
+    def test_load_state_without_last_run(self):
+        """State files without last_run should load successfully."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / ".pr-conflict-state.json"
+            old_state = {
+                "conflicts": [
+                    {
+                        "repo": "org/repo",
+                        "pr_a": 1,
+                        "pr_b": 2,
+                        "files": ["main.py"],
+                        "first_seen": "2026-01-01T00:00:00+00:00",
+                    }
+                ]
+            }
+            with open(state_file, "w", encoding="utf-8") as f:
+                json.dump(old_state, f)
+
+            state = deduplication.load_state(tmpdir)
+            self.assertEqual(len(state["conflicts"]), 1)
+            self.assertNotIn("last_run", state)
+
+    def test_load_state_with_last_run(self):
+        """State files with last_run should preserve it."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / ".pr-conflict-state.json"
+            state_data = {
+                "conflicts": [],
+                "last_run": "2026-03-15T10:00:00+00:00",
+            }
+            with open(state_file, "w", encoding="utf-8") as f:
+                json.dump(state_data, f)
+
+            state = deduplication.load_state(tmpdir)
+            self.assertEqual(state["last_run"], "2026-03-15T10:00:00+00:00")
+
+    def test_compare_conflicts_ignores_last_run(self):
+        """compare_conflicts should work with or without last_run in state."""
+        state_with_last_run = {
+            "conflicts": [
+                {
+                    "repo": "org/repo",
+                    "pr_a": 1,
+                    "pr_b": 2,
+                    "files": ["README.md"],
+                    "first_seen": "2026-01-01T00:00:00+00:00",
+                }
+            ],
+            "last_run": "2026-03-15T10:00:00+00:00",
+        }
+        conflicts = {"org/repo": [_make_conflict(1, 2, ["README.md"])]}
+        result = deduplication.compare_conflicts(conflicts, state_with_last_run)
+
+        self.assertEqual(len(result.unchanged_conflicts), 1)
+        self.assertEqual(len(result.new_conflicts), 0)
+
+    def test_prune_preserves_last_run(self):
+        """prune_expired_conflicts should not strip last_run from state."""
+        now = datetime.now(timezone.utc)
+        state = {
+            "conflicts": [
+                {
+                    "repo": "org/repo",
+                    "pr_a": 1,
+                    "pr_b": 2,
+                    "files": ["f.py"],
+                    "first_seen": (now - timedelta(days=10)).isoformat(),
+                }
+            ],
+            "last_run": "2026-03-15T10:00:00+00:00",
+        }
+        pruned = deduplication.prune_expired_conflicts(state)
+        self.assertIn("last_run", pruned)
+        self.assertEqual(pruned["last_run"], "2026-03-15T10:00:00+00:00")
 
 
 class TestFingerprintConversion(unittest.TestCase):
