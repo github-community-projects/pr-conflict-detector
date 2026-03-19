@@ -89,6 +89,22 @@ def _make_pr(number, title="PR title", author="dev"):
     )
 
 
+def _mock_fetch_with_filter(prs):
+    """Create a side_effect for fetch_all_pr_data that applies filter_authors.
+
+    This simulates the real fetch_all_pr_data behavior where filter_authors
+    is applied before fetching file changes.
+    """
+
+    def side_effect(*_args, **kwargs):
+        filter_authors = kwargs.get("filter_authors")
+        if filter_authors:
+            return [pr for pr in prs if pr.author in filter_authors]
+        return list(prs)
+
+    return side_effect
+
+
 def _mock_dedup_passthrough():
     """Create a mock deduplication module that passes conflicts through.
 
@@ -211,7 +227,9 @@ class TestMainWithOrganization(unittest.TestCase):
 
         mock_get_env.assert_called_once()
         mock_auth.assert_called_once()
-        mock_fetch.assert_called_once_with(repo, True, gh, "test-org", "repo-a")
+        mock_fetch.assert_called_once_with(
+            repo, True, gh, "test-org", "repo-a", filter_authors=None
+        )
         mock_detect.assert_called_once_with(
             [pr1, pr2],
             verify=False,
@@ -315,7 +333,7 @@ class TestSkipsExemptRepos(unittest.TestCase):
         # fetch_all_pr_data should only be called for the normal repo
         self.assertEqual(mock_fetch.call_count, 1)
         mock_fetch.assert_called_once_with(
-            normal_repo, True, gh, "test-org", "normal-repo"
+            normal_repo, True, gh, "test-org", "normal-repo", filter_authors=None
         )
 
 
@@ -359,7 +377,9 @@ class TestSkipsArchivedRepos(unittest.TestCase):
         main()
 
         self.assertEqual(mock_fetch.call_count, 1)
-        mock_fetch.assert_called_once_with(active, True, gh, "test-org", "active-repo")
+        mock_fetch.assert_called_once_with(
+            active, True, gh, "test-org", "active-repo", filter_authors=None
+        )
 
 
 @patch("pr_conflict_detector.deduplication", new=_mock_dedup_passthrough())
@@ -554,7 +574,7 @@ class TestFilterAuthors(unittest.TestCase):
         pr_alice = _make_pr(1, author="alice")
         pr_bob = _make_pr(2, author="bob")
         pr_charlie = _make_pr(3, author="charlie")
-        mock_fetch.return_value = [pr_alice, pr_bob, pr_charlie]
+        mock_fetch.side_effect = _mock_fetch_with_filter([pr_alice, pr_bob, pr_charlie])
         mock_detect.return_value = []
 
         main()
@@ -590,7 +610,7 @@ class TestFilterAuthors(unittest.TestCase):
 
         pr_bob = _make_pr(1, author="bob")
         pr_charlie = _make_pr(2, author="charlie")
-        mock_fetch.return_value = [pr_bob, pr_charlie]
+        mock_fetch.side_effect = _mock_fetch_with_filter([pr_bob, pr_charlie])
 
         main()
 
@@ -638,7 +658,7 @@ class TestFilterTeams(unittest.TestCase):
         pr_alice = _make_pr(1, author="alice")
         pr_bob = _make_pr(2, author="bob")
         pr_charlie = _make_pr(3, author="charlie")
-        mock_fetch.return_value = [pr_alice, pr_bob, pr_charlie]
+        mock_fetch.side_effect = _mock_fetch_with_filter([pr_alice, pr_bob, pr_charlie])
         mock_detect.return_value = []
 
         main()
@@ -684,7 +704,9 @@ class TestFilterTeams(unittest.TestCase):
         pr_bob = _make_pr(2, author="bob")
         pr_charlie = _make_pr(3, author="charlie")
         pr_dana = _make_pr(4, author="dana")
-        mock_fetch.return_value = [pr_alice, pr_bob, pr_charlie, pr_dana]
+        mock_fetch.side_effect = _mock_fetch_with_filter(
+            [pr_alice, pr_bob, pr_charlie, pr_dana]
+        )
         mock_detect.return_value = []
 
         main()
@@ -774,7 +796,9 @@ class TestFilterTeams(unittest.TestCase):
         pr_bob = _make_pr(2, author="bob")
         pr_charlie = _make_pr(3, author="charlie")
         pr_dana = _make_pr(4, author="dana")
-        mock_fetch.return_value = [pr_alice, pr_bob, pr_charlie, pr_dana]
+        mock_fetch.side_effect = _mock_fetch_with_filter(
+            [pr_alice, pr_bob, pr_charlie, pr_dana]
+        )
         mock_detect.return_value = []
 
         main()

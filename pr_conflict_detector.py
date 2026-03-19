@@ -80,21 +80,17 @@ def main():
         # Fetch all open PR data
         owner, repo_name = repo.full_name.split("/")
         prs = fetch_all_pr_data(
-            repo, env_vars.include_drafts, github_connection, owner, repo_name
+            repo,
+            env_vars.include_drafts,
+            github_connection,
+            owner,
+            repo_name,
+            filter_authors=combined_filter_authors or None,
         )
 
         # Filter exempt PRs
         if env_vars.exempt_prs:
             prs = [pr for pr in prs if pr.number not in env_vars.exempt_prs]
-
-        # Filter by author if configured (FILTER_AUTHORS and/or FILTER_TEAMS)
-        if combined_filter_authors:
-            prs = [pr for pr in prs if pr.author in combined_filter_authors]
-            if not prs:
-                print(
-                    f"  No PRs from filtered authors ({len(combined_filter_authors)} configured)"
-                )
-                continue
 
         if len(prs) < 2:
             print(f"  {len(prs)} open PR(s) - need at least 2 to detect conflicts")

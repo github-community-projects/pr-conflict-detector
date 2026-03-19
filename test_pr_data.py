@@ -390,6 +390,101 @@ class TestFetchAllPrData(unittest.TestCase):
         args = mock_get_open_prs.call_args
         self.assertFalse(args[0][1])  # include_drafts=False
 
+    @patch("pr_data.get_open_prs")
+    def test_filter_authors_skips_file_fetch(self, mock_get_open_prs):
+        """When filter_authors is set, only matching PRs should have files fetched."""
+        pr_alice = PullRequestData(
+            number=1,
+            title="Alice PR",
+            author="alice",
+            html_url="url1",
+            is_draft=False,
+            base_branch="main",
+            head_branch="f-1",
+        )
+        pr_bob = PullRequestData(
+            number=2,
+            title="Bob PR",
+            author="bob",
+            html_url="url2",
+            is_draft=False,
+            base_branch="main",
+            head_branch="f-2",
+        )
+        pr_charlie = PullRequestData(
+            number=3,
+            title="Charlie PR",
+            author="charlie",
+            html_url="url3",
+            is_draft=False,
+            base_branch="main",
+            head_branch="f-3",
+        )
+        mock_get_open_prs.return_value = [pr_alice, pr_bob, pr_charlie]
+
+        mock_repo = MagicMock()
+        mock_full_pr = MagicMock()
+        mock_full_pr.files.return_value = [
+            _make_mock_file(filename="test.py", patch_str="@@ -1,2 +1,3 @@\n+x"),
+        ]
+        mock_repo.pull_request.return_value = mock_full_pr
+
+        result = fetch_all_pr_data(
+            mock_repo,
+            True,
+            MagicMock(),
+            "owner",
+            "repo",
+            filter_authors={"alice", "bob"},
+        )
+
+        # Only alice and bob returned
+        self.assertEqual(len(result), 2)
+        authors = {pr.author for pr in result}
+        self.assertEqual(authors, {"alice", "bob"})
+        # Only 2 API calls for files, not 3
+        self.assertEqual(mock_repo.pull_request.call_count, 2)
+
+    @patch("pr_data.get_open_prs")
+    def test_filter_authors_none_fetches_all(self, mock_get_open_prs):
+        """When filter_authors is None, all PRs should have files fetched."""
+        pr1 = PullRequestData(
+            number=1,
+            title="PR 1",
+            author="user1",
+            html_url="url1",
+            is_draft=False,
+            base_branch="main",
+            head_branch="f-1",
+        )
+        pr2 = PullRequestData(
+            number=2,
+            title="PR 2",
+            author="user2",
+            html_url="url2",
+            is_draft=False,
+            base_branch="main",
+            head_branch="f-2",
+        )
+        mock_get_open_prs.return_value = [pr1, pr2]
+
+        mock_repo = MagicMock()
+        mock_full_pr = MagicMock()
+        mock_full_pr.files.return_value = []
+        mock_repo.pull_request.return_value = mock_full_pr
+
+        result = fetch_all_pr_data(
+            mock_repo,
+            True,
+            MagicMock(),
+            "owner",
+            "repo",
+            filter_authors=None,
+        )
+
+        self.assertEqual(len(result), 2)
+        self.assertEqual(mock_repo.pull_request.call_count, 2)
+
 
 class TestDataClasses(unittest.TestCase):
     """Tests for the data classes."""
