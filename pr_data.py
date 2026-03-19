@@ -131,6 +131,7 @@ def fetch_all_pr_data(
     github_connection: object,
     owner: str,
     repo_name: str,
+    filter_authors: set[str] | None = None,
 ) -> list[PullRequestData]:
     """
     Fetch all open PRs and their changed files from a repository.
@@ -141,11 +142,24 @@ def fetch_all_pr_data(
         github_connection: The github3-py GitHub connection.
         owner: The repository owner.
         repo_name: The repository name.
+        filter_authors: If provided, only fetch file changes for PRs authored
+            by users in this set. PRs from other authors are excluded from the
+            returned list entirely. This avoids expensive per-PR API calls for
+            PRs that would be filtered out later.
 
     Returns:
         A list of PullRequestData objects with changed files populated.
     """
     prs = get_open_prs(repo, include_drafts)
+
+    if filter_authors:
+        before_count = len(prs)
+        prs = [pr for pr in prs if pr.author in filter_authors]
+        print(
+            f"  Filtered to {len(prs)} of {before_count} PRs "
+            f"by author ({len(filter_authors)} authors configured)"
+        )
+
     total = len(prs)
     if total == 0:
         return prs
