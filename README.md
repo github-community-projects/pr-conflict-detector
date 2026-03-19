@@ -137,7 +137,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .pr-conflict-state.json
-          key: pr-conflict-state-${{ github.run_id }}
+          key: pr-conflict-state-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: pr-conflict-state-
 
       - name: Detect PR Conflicts
@@ -154,7 +154,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .pr-conflict-state.json
-          key: pr-conflict-state-${{ github.run_id }}
+          key: pr-conflict-state-${{ github.run_id }}-${{ github.run_attempt }}
 ```
 
 #### Single repository
@@ -179,7 +179,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .pr-conflict-state.json
-          key: pr-conflict-state-${{ github.run_id }}
+          key: pr-conflict-state-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: pr-conflict-state-
 
       - name: Detect PR Conflicts
@@ -194,7 +194,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .pr-conflict-state.json
-          key: pr-conflict-state-${{ github.run_id }}
+          key: pr-conflict-state-${{ github.run_id }}-${{ github.run_attempt }}
 ```
 
 #### Multiple repositories with GitHub App authentication
@@ -219,7 +219,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .pr-conflict-state.json
-          key: pr-conflict-state-${{ github.run_id }}
+          key: pr-conflict-state-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: pr-conflict-state-
 
       - name: Detect PR Conflicts
@@ -238,7 +238,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .pr-conflict-state.json
-          key: pr-conflict-state-${{ github.run_id }}
+          key: pr-conflict-state-${{ github.run_id }}-${{ github.run_attempt }}
 ```
 
 #### Incremental rollout to a specific team
@@ -265,7 +265,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .pr-conflict-state.json
-          key: pr-conflict-state-${{ github.run_id }}
+          key: pr-conflict-state-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: pr-conflict-state-
 
       - name: Detect PR Conflicts
@@ -282,7 +282,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .pr-conflict-state.json
-          key: pr-conflict-state-${{ github.run_id }}
+          key: pr-conflict-state-${{ github.run_id }}-${{ github.run_attempt }}
 ```
 
 You can also combine `FILTER_TEAMS` with `FILTER_AUTHORS` — the members are merged (union):
@@ -378,7 +378,7 @@ steps:
     uses: actions/cache/restore@v4
     with:
       path: .pr-conflict-state.json
-      key: pr-conflict-state-${{ github.run_id }}
+      key: pr-conflict-state-${{ github.run_id }}-${{ github.run_attempt }}
       restore-keys: pr-conflict-state-
 
   - name: Detect PR Conflicts
@@ -393,13 +393,13 @@ steps:
     uses: actions/cache/save@v4
     with:
       path: .pr-conflict-state.json
-      key: pr-conflict-state-${{ github.run_id }}
+      key: pr-conflict-state-${{ github.run_id }}-${{ github.run_attempt }}
 ```
 
 **How it works:**
 
 - `restore-keys` prefix matching always finds the most recent saved state
-- Each run saves with a unique key (`run_id`), so entries are never overwritten
+- Each run saves with a unique key (`run_id` + `run_attempt`), so entries are never overwritten and re-runs create their own cache entry
 - Old entries are evicted automatically by LRU within GitHub's 10GB cache limit
 
 **Note:** GitHub evicts cache entries not accessed within 7 days. If your workflow only triggers infrequently (e.g., on push to the default branch), state may be lost during quiet periods. For reliable deduplication, use a scheduled trigger:
@@ -409,6 +409,18 @@ on:
   schedule:
     - cron: "0,30 * * * 1-5" # every 30 min on weekdays
 ```
+
+**Best practices for scheduled workflows:**
+
+If your detection step takes longer than your schedule interval (e.g., scanning large repos with `VERIFY_CONFLICTS: "true"`), overlapping runs can restore the same stale state and send duplicate notifications. Add a `concurrency` group to queue runs instead of running them in parallel:
+
+```yaml
+concurrency:
+  group: pr-conflict-detection
+  cancel-in-progress: false
+```
+
+With `cancel-in-progress: false`, the queued run waits for the current run to finish and save its state. When the queued run starts, it restores the freshly saved state and deduplicates correctly. If runs consistently exceed the schedule interval, the queue won't grow unbounded — GitHub automatically cancels the oldest pending run when a third one enters the queue, so at most one run is waiting at any time. This means the system self-regulates: one run is active, one is queued, and any additional triggers are dropped.
 
 #### Option 2: Git commit-back
 
