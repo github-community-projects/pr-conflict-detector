@@ -223,8 +223,8 @@ def _build_consolidated_comment(
         "[pr-conflict-detector](https://github.com/github-community-projects/pr-conflict-detector)."
     )
     banner = (
-        "\n> 🔄 **This comment updates automatically** "
-        "as conflicts are detected and resolved.\n"
+        "\n*🔄 **This comment updates automatically** "
+        "as conflicts are detected and resolved.*\n"
     )
 
     if not conflict_entries:
