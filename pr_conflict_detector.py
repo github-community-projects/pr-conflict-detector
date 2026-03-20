@@ -217,18 +217,32 @@ def main():
     else:
         print("No new or changed conflicts — skipping Slack notifications")
 
-    # Post PR comments (only for new + changed conflicts)
-    if env_vars.enable_pr_comments and notify_conflicts:
+    # Post PR comments (all active conflicts + resolved info)
+    # Pass all_conflicts so every PR's comment shows its full conflict picture,
+    # plus resolved entries and new-conflict badges for UX.
+    has_comment_changes = bool(notify_conflicts) or bool(
+        dedup_result.resolved_fingerprints
+    )
+    if env_vars.enable_pr_comments and has_comment_changes:
+        new_conflict_keys: set[tuple[int, int]] = set()
+        for conflict in dedup_result.new_conflicts:
+            new_conflict_keys.add((conflict.pr_a.number, conflict.pr_b.number))
+
+        active_count = sum(len(c) for c in all_conflicts.values())
+        resolved_count = len(updated_state.get("resolved_conflicts", []))
         print(
-            f"Posting PR comments for {sum(len(c) for c in notify_conflicts.values())} conflict(s)"
+            f"Posting PR comments ({active_count} active conflict(s), "
+            f"{resolved_count} resolved)"
         )
         post_pr_comments(
-            notify_conflicts,
+            all_conflicts,
             github_connection,
+            new_conflict_keys=new_conflict_keys,
+            resolved_entries=updated_state.get("resolved_conflicts", []),
             dry_run=env_vars.dry_run,
         )
     elif env_vars.enable_pr_comments:
-        print("No new or changed conflicts — skipping PR comments")
+        print("No new, changed, or resolved conflicts — skipping PR comments")
 
 
 def get_repos_iterator(github_connection, env_vars):

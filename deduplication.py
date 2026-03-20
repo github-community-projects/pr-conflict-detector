@@ -8,6 +8,18 @@ from typing import Any
 
 from conflict_detector import ConflictResult
 
+RESOLVED_MAX_AGE_DAYS = 7
+MAX_RESOLVED_PER_PR = 10
+
+
+@dataclass
+class PRDisplayInfo:
+    """Display metadata for a PR, stored in fingerprints for comment rendering."""
+
+    title: str = ""
+    url: str = ""
+    author: str = ""
+
 
 @dataclass
 class ConflictFingerprint:
@@ -18,6 +30,11 @@ class ConflictFingerprint:
     pr_b: int
     files: list[str]
     first_seen: str  # ISO 8601 timestamp
+    # (pr_a_info, pr_b_info) - display metadata for comment rendering
+    pr_info: tuple[PRDisplayInfo, PRDisplayInfo] = field(
+        default_factory=lambda: (PRDisplayInfo(), PRDisplayInfo())
+    )
+    resolved_at: str = ""
 
 
 @dataclass
@@ -89,7 +106,7 @@ def prune_expired_conflicts(
 
     Args:
         state: State dictionary with 'conflicts' list.
-        expiry_days: Number of days after which to expire conflicts.
+        expiry_days: Number of days after which to expire active conflicts.
 
     Returns:
         Updated state with expired conflicts removed.
@@ -100,6 +117,8 @@ def prune_expired_conflicts(
     for conflict in state.get("conflicts", []):
         try:
             first_seen = datetime.fromisoformat(conflict["first_seen"])
+            if first_seen.tzinfo is None:
+                first_seen = first_seen.replace(tzinfo=timezone.utc)
             if first_seen >= cutoff:
                 pruned_conflicts.append(conflict)
         except (ValueError, KeyError):
@@ -107,6 +126,21 @@ def prune_expired_conflicts(
             continue
 
     state["conflicts"] = pruned_conflicts
+
+    # Prune resolved conflicts older than RESOLVED_MAX_AGE_DAYS
+    resolved_cutoff = datetime.now(timezone.utc) - timedelta(days=RESOLVED_MAX_AGE_DAYS)
+    pruned_resolved = []
+    for resolved in state.get("resolved_conflicts", []):
+        try:
+            resolved_at = datetime.fromisoformat(resolved["resolved_at"])
+            if resolved_at.tzinfo is None:
+                resolved_at = resolved_at.replace(tzinfo=timezone.utc)
+            if resolved_at >= resolved_cutoff:
+                pruned_resolved.append(resolved)
+        except (ValueError, KeyError):
+            continue
+    state["resolved_conflicts"] = pruned_resolved
+
     return state
 
 
@@ -133,18 +167,39 @@ def conflict_to_fingerprint(
         pr_b=conflict.pr_b.number,
         files=files,
         first_seen=timestamp,
+        pr_info=(
+            PRDisplayInfo(
+                title=conflict.pr_a.title,
+                url=conflict.pr_a.url,
+                author=conflict.pr_a.author,
+            ),
+            PRDisplayInfo(
+                title=conflict.pr_b.title,
+                url=conflict.pr_b.url,
+                author=conflict.pr_b.author,
+            ),
+        ),
     )
 
 
 def fingerprint_to_dict(fp: ConflictFingerprint) -> dict[str, Any]:
     """Convert a ConflictFingerprint to a JSON-serializable dict."""
-    return {
+    d: dict[str, Any] = {
         "repo": fp.repo,
         "pr_a": fp.pr_a,
         "pr_b": fp.pr_b,
         "files": fp.files,
         "first_seen": fp.first_seen,
+        "pr_a_title": fp.pr_info[0].title,
+        "pr_a_url": fp.pr_info[0].url,
+        "pr_b_title": fp.pr_info[1].title,
+        "pr_b_url": fp.pr_info[1].url,
+        "pr_a_author": fp.pr_info[0].author,
+        "pr_b_author": fp.pr_info[1].author,
     }
+    if fp.resolved_at:
+        d["resolved_at"] = fp.resolved_at
+    return d
 
 
 def dict_to_fingerprint(data: dict[str, Any]) -> ConflictFingerprint:
@@ -155,6 +210,19 @@ def dict_to_fingerprint(data: dict[str, Any]) -> ConflictFingerprint:
         pr_b=data["pr_b"],
         files=data["files"],
         first_seen=data["first_seen"],
+        pr_info=(
+            PRDisplayInfo(
+                title=data.get("pr_a_title", ""),
+                url=data.get("pr_a_url", ""),
+                author=data.get("pr_a_author", ""),
+            ),
+            PRDisplayInfo(
+                title=data.get("pr_b_title", ""),
+                url=data.get("pr_b_url", ""),
+                author=data.get("pr_b_author", ""),
+            ),
+        ),
+        resolved_at=data.get("resolved_at", ""),
     )
 
 
@@ -212,12 +280,16 @@ def update_state_with_current(
 ) -> dict[str, Any]:
     """Update state with current conflicts, preserving timestamps for unchanged.
 
+    Also tracks newly resolved conflicts by moving them from the active list
+    to the resolved list with a resolved_at timestamp.
+
     Args:
         current_conflicts: Dict mapping repo name to list of ConflictResult objects.
         state: Existing state dictionary.
 
     Returns:
-        Updated state dictionary with 'conflicts' list and 'last_run' timestamp.
+        Updated state dictionary with 'conflicts', 'resolved_conflicts',
+        and 'last_run' timestamp.
     """
     # Build lookup of existing timestamps
     existing_timestamps: dict[tuple[str, int, int], str] = {}
@@ -228,15 +300,34 @@ def update_state_with_current(
 
     # Build new state with current conflicts
     new_fingerprints = []
+    current_keys: set[tuple[str, int, int]] = set()
     for repo, conflicts in current_conflicts.items():
         for conflict in conflicts:
             key = (repo, conflict.pr_a.number, conflict.pr_b.number)
+            current_keys.add(key)
             # Preserve timestamp if conflict existed before, otherwise use current time
             timestamp = existing_timestamps.get(key)
             fp = conflict_to_fingerprint(conflict, repo, timestamp)
             new_fingerprints.append(fingerprint_to_dict(fp))
 
+    # Carry forward existing resolved conflicts, excluding any that reappeared
+    resolved = [
+        r
+        for r in state.get("resolved_conflicts", [])
+        if (r.get("repo", ""), r.get("pr_a"), r.get("pr_b")) not in current_keys
+    ]
+
+    # Add newly resolved conflicts (in previous state but not in current)
+    now = datetime.now(timezone.utc).isoformat()
+    for fp_dict in state.get("conflicts", []):
+        fp = dict_to_fingerprint(fp_dict)
+        key = (fp.repo, fp.pr_a, fp.pr_b)
+        if key not in current_keys:
+            fp.resolved_at = now
+            resolved.append(fingerprint_to_dict(fp))
+
     return {
         "conflicts": new_fingerprints,
+        "resolved_conflicts": resolved,
         "last_run": datetime.now(timezone.utc).isoformat(),
     }
