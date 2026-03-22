@@ -151,7 +151,7 @@ class TestPruneExpiredConflicts(unittest.TestCase):
         """Empty state should remain empty."""
         state = {"conflicts": []}
         pruned = deduplication.prune_expired_conflicts(state)
-        self.assertEqual(pruned, {"conflicts": []})
+        self.assertEqual(pruned, {"conflicts": [], "resolved_conflicts": []})
 
     def test_prune_keeps_recent(self):
         """Recent conflicts should be kept."""
@@ -492,14 +492,37 @@ class TestFingerprintConversion(unittest.TestCase):
         # Should have a timestamp
         datetime.fromisoformat(fp.first_seen)  # Should not raise
 
+    def test_conflict_to_fingerprint_populates_pr_info(self):
+        """Should populate pr_info from the ConflictResult."""
+        conflict = _make_conflict(1, 2, ["file.py"])
+        fp = deduplication.conflict_to_fingerprint(conflict, "org/repo")
+
+        # _make_conflict uses PRInfo(num, "http://prN", "PR N", author)
+        # PRInfo fields: number, title, author, url
+        # So: title="http://pr1", author="PR 1", url="alice"
+        self.assertEqual(fp.pr_info[0].title, "http://pr1")
+        self.assertEqual(fp.pr_info[0].url, "alice")
+        self.assertEqual(fp.pr_info[0].author, "PR 1")
+        self.assertEqual(fp.pr_info[1].title, "http://pr2")
+        self.assertEqual(fp.pr_info[1].url, "bob")
+        self.assertEqual(fp.pr_info[1].author, "PR 2")
+
     def test_fingerprint_to_dict(self):
-        """Should convert ConflictFingerprint to dict."""
+        """Should convert ConflictFingerprint to dict including PR display info."""
         fp = deduplication.ConflictFingerprint(
             repo="org/repo",
             pr_a=1,
             pr_b=2,
             files=["test.py"],
             first_seen="2026-01-01T00:00:00+00:00",
+            pr_info=(
+                deduplication.PRDisplayInfo(
+                    title="PR 1", url="http://pr1", author="alice"
+                ),
+                deduplication.PRDisplayInfo(
+                    title="PR 2", url="http://pr2", author="bob"
+                ),
+            ),
         )
         fp_dict = deduplication.fingerprint_to_dict(fp)
 
@@ -508,9 +531,71 @@ class TestFingerprintConversion(unittest.TestCase):
         self.assertEqual(fp_dict["pr_b"], 2)
         self.assertEqual(fp_dict["files"], ["test.py"])
         self.assertEqual(fp_dict["first_seen"], "2026-01-01T00:00:00+00:00")
+        self.assertEqual(fp_dict["pr_a_title"], "PR 1")
+        self.assertEqual(fp_dict["pr_a_url"], "http://pr1")
+        self.assertEqual(fp_dict["pr_b_title"], "PR 2")
+        self.assertEqual(fp_dict["pr_b_url"], "http://pr2")
+        self.assertEqual(fp_dict["pr_a_author"], "alice")
+        self.assertEqual(fp_dict["pr_b_author"], "bob")
+
+    def test_fingerprint_to_dict_includes_resolved_at(self):
+        """resolved_at should appear in dict when set."""
+        fp = deduplication.ConflictFingerprint(
+            repo="org/repo",
+            pr_a=1,
+            pr_b=2,
+            files=["test.py"],
+            first_seen="2026-01-01T00:00:00+00:00",
+            resolved_at="2026-03-01T00:00:00+00:00",
+        )
+        fp_dict = deduplication.fingerprint_to_dict(fp)
+        self.assertEqual(fp_dict["resolved_at"], "2026-03-01T00:00:00+00:00")
+
+    def test_fingerprint_to_dict_omits_resolved_at_when_empty(self):
+        """resolved_at should not appear in dict when empty."""
+        fp = deduplication.ConflictFingerprint(
+            repo="org/repo",
+            pr_a=1,
+            pr_b=2,
+            files=["test.py"],
+            first_seen="2026-01-01T00:00:00+00:00",
+        )
+        fp_dict = deduplication.fingerprint_to_dict(fp)
+        self.assertNotIn("resolved_at", fp_dict)
 
     def test_dict_to_fingerprint(self):
-        """Should convert dict to ConflictFingerprint."""
+        """Should convert dict to ConflictFingerprint with all fields."""
+        fp_dict = {
+            "repo": "org/repo",
+            "pr_a": 1,
+            "pr_b": 2,
+            "files": ["test.py"],
+            "first_seen": "2026-01-01T00:00:00+00:00",
+            "pr_a_title": "PR 1",
+            "pr_a_url": "http://pr1",
+            "pr_b_title": "PR 2",
+            "pr_b_url": "http://pr2",
+            "pr_a_author": "alice",
+            "pr_b_author": "bob",
+            "resolved_at": "2026-03-01T00:00:00+00:00",
+        }
+        fp = deduplication.dict_to_fingerprint(fp_dict)
+
+        self.assertEqual(fp.repo, "org/repo")
+        self.assertEqual(fp.pr_a, 1)
+        self.assertEqual(fp.pr_b, 2)
+        self.assertEqual(fp.files, ["test.py"])
+        self.assertEqual(fp.first_seen, "2026-01-01T00:00:00+00:00")
+        self.assertEqual(fp.pr_info[0].title, "PR 1")
+        self.assertEqual(fp.pr_info[0].url, "http://pr1")
+        self.assertEqual(fp.pr_info[0].author, "alice")
+        self.assertEqual(fp.pr_info[1].title, "PR 2")
+        self.assertEqual(fp.pr_info[1].url, "http://pr2")
+        self.assertEqual(fp.pr_info[1].author, "bob")
+        self.assertEqual(fp.resolved_at, "2026-03-01T00:00:00+00:00")
+
+    def test_dict_to_fingerprint_backward_compat(self):
+        """Old dicts without PR display fields should still work."""
         fp_dict = {
             "repo": "org/repo",
             "pr_a": 1,
@@ -521,10 +606,307 @@ class TestFingerprintConversion(unittest.TestCase):
         fp = deduplication.dict_to_fingerprint(fp_dict)
 
         self.assertEqual(fp.repo, "org/repo")
-        self.assertEqual(fp.pr_a, 1)
-        self.assertEqual(fp.pr_b, 2)
-        self.assertEqual(fp.files, ["test.py"])
-        self.assertEqual(fp.first_seen, "2026-01-01T00:00:00+00:00")
+        self.assertEqual(fp.pr_info[0].title, "")
+        self.assertEqual(fp.pr_info[0].url, "")
+        self.assertEqual(fp.pr_info[0].author, "")
+        self.assertEqual(fp.pr_info[1].title, "")
+        self.assertEqual(fp.pr_info[1].url, "")
+        self.assertEqual(fp.pr_info[1].author, "")
+        self.assertEqual(fp.resolved_at, "")
+
+
+class TestPruneResolvedConflicts(unittest.TestCase):
+    """Test pruning of resolved conflicts in prune_expired_conflicts."""
+
+    def test_prune_keeps_recent_resolved(self):
+        """Resolved entries within RESOLVED_MAX_AGE_DAYS should be kept."""
+        now = datetime.now(timezone.utc)
+        recent = now - timedelta(days=3)
+        state = {
+            "conflicts": [],
+            "resolved_conflicts": [
+                {
+                    "repo": "org/repo",
+                    "pr_a": 1,
+                    "pr_b": 2,
+                    "files": ["file.py"],
+                    "first_seen": "2026-01-01T00:00:00+00:00",
+                    "resolved_at": recent.isoformat(),
+                }
+            ],
+        }
+        pruned = deduplication.prune_expired_conflicts(state)
+        self.assertEqual(len(pruned["resolved_conflicts"]), 1)
+
+    def test_prune_removes_old_resolved(self):
+        """Resolved entries older than RESOLVED_MAX_AGE_DAYS should be removed."""
+        now = datetime.now(timezone.utc)
+        old = now - timedelta(days=10)
+        state = {
+            "conflicts": [],
+            "resolved_conflicts": [
+                {
+                    "repo": "org/repo",
+                    "pr_a": 1,
+                    "pr_b": 2,
+                    "files": ["file.py"],
+                    "first_seen": "2026-01-01T00:00:00+00:00",
+                    "resolved_at": old.isoformat(),
+                }
+            ],
+        }
+        pruned = deduplication.prune_expired_conflicts(state)
+        self.assertEqual(len(pruned["resolved_conflicts"]), 0)
+
+    def test_prune_mixed_resolved(self):
+        """Should keep recent and remove old resolved entries."""
+        now = datetime.now(timezone.utc)
+        recent = now - timedelta(days=2)
+        old = now - timedelta(days=10)
+        state = {
+            "conflicts": [],
+            "resolved_conflicts": [
+                {
+                    "repo": "org/repo",
+                    "pr_a": 1,
+                    "pr_b": 2,
+                    "files": ["recent.py"],
+                    "first_seen": "2026-01-01T00:00:00+00:00",
+                    "resolved_at": recent.isoformat(),
+                },
+                {
+                    "repo": "org/repo",
+                    "pr_a": 3,
+                    "pr_b": 4,
+                    "files": ["old.py"],
+                    "first_seen": "2026-01-01T00:00:00+00:00",
+                    "resolved_at": old.isoformat(),
+                },
+            ],
+        }
+        pruned = deduplication.prune_expired_conflicts(state)
+        self.assertEqual(len(pruned["resolved_conflicts"]), 1)
+        self.assertEqual(pruned["resolved_conflicts"][0]["pr_a"], 1)
+
+    def test_prune_skips_malformed_resolved(self):
+        """Malformed resolved entries (missing resolved_at) should be skipped."""
+        now = datetime.now(timezone.utc)
+        recent = now - timedelta(days=2)
+        state = {
+            "conflicts": [],
+            "resolved_conflicts": [
+                {
+                    "repo": "org/repo",
+                    "pr_a": 1,
+                    "pr_b": 2,
+                    "files": ["good.py"],
+                    "first_seen": "2026-01-01T00:00:00+00:00",
+                    "resolved_at": recent.isoformat(),
+                },
+                {
+                    "repo": "org/repo",
+                    "pr_a": 3,
+                    "pr_b": 4,
+                    "files": ["bad.py"],
+                    "first_seen": "2026-01-01T00:00:00+00:00",
+                    # Missing resolved_at
+                },
+            ],
+        }
+        pruned = deduplication.prune_expired_conflicts(state)
+        self.assertEqual(len(pruned["resolved_conflicts"]), 1)
+        self.assertEqual(pruned["resolved_conflicts"][0]["pr_a"], 1)
+
+
+class TestUpdateStateResolvedTracking(unittest.TestCase):
+    """Test resolved conflict tracking in update_state_with_current."""
+
+    def test_disappeared_conflict_becomes_resolved(self):
+        """When a conflict disappears from current, it should appear in resolved_conflicts."""
+        state = {
+            "conflicts": [
+                {
+                    "repo": "org/repo",
+                    "pr_a": 1,
+                    "pr_b": 2,
+                    "files": ["file.py"],
+                    "first_seen": "2026-01-01T00:00:00+00:00",
+                }
+            ]
+        }
+        # Current has no conflicts - PR 1-2 resolved
+        updated = deduplication.update_state_with_current({}, state)
+
+        self.assertEqual(len(updated["conflicts"]), 0)
+        self.assertEqual(len(updated["resolved_conflicts"]), 1)
+        resolved = updated["resolved_conflicts"][0]
+        self.assertEqual(resolved["pr_a"], 1)
+        self.assertEqual(resolved["pr_b"], 2)
+        self.assertIn("resolved_at", resolved)
+        # resolved_at should be a valid ISO timestamp
+        datetime.fromisoformat(resolved["resolved_at"])
+
+    def test_existing_resolved_carried_forward(self):
+        """Existing resolved_conflicts from state should be preserved."""
+        state = {
+            "conflicts": [],
+            "resolved_conflicts": [
+                {
+                    "repo": "org/repo",
+                    "pr_a": 5,
+                    "pr_b": 6,
+                    "files": ["old.py"],
+                    "first_seen": "2026-01-01T00:00:00+00:00",
+                    "resolved_at": "2026-03-01T00:00:00+00:00",
+                }
+            ],
+        }
+        updated = deduplication.update_state_with_current({}, state)
+
+        self.assertEqual(len(updated["resolved_conflicts"]), 1)
+        self.assertEqual(updated["resolved_conflicts"][0]["pr_a"], 5)
+        self.assertEqual(
+            updated["resolved_conflicts"][0]["resolved_at"],
+            "2026-03-01T00:00:00+00:00",
+        )
+
+    def test_new_resolved_added_alongside_existing(self):
+        """New resolved conflicts should be appended to existing resolved list."""
+        state = {
+            "conflicts": [
+                {
+                    "repo": "org/repo",
+                    "pr_a": 1,
+                    "pr_b": 2,
+                    "files": ["file.py"],
+                    "first_seen": "2026-01-01T00:00:00+00:00",
+                }
+            ],
+            "resolved_conflicts": [
+                {
+                    "repo": "org/repo",
+                    "pr_a": 5,
+                    "pr_b": 6,
+                    "files": ["old.py"],
+                    "first_seen": "2026-01-01T00:00:00+00:00",
+                    "resolved_at": "2026-03-01T00:00:00+00:00",
+                }
+            ],
+        }
+        # PR 1-2 disappears from current
+        updated = deduplication.update_state_with_current({}, state)
+
+        self.assertEqual(len(updated["resolved_conflicts"]), 2)
+        pr_pairs = [(r["pr_a"], r["pr_b"]) for r in updated["resolved_conflicts"]]
+        self.assertIn((5, 6), pr_pairs)
+        self.assertIn((1, 2), pr_pairs)
+
+    def test_update_state_returns_resolved_conflicts_key(self):
+        """Updated state should always include resolved_conflicts key."""
+        state = {"conflicts": []}
+        conflicts = {"org/repo": [_make_conflict(1, 2, ["file.py"])]}
+        updated = deduplication.update_state_with_current(conflicts, state)
+
+        self.assertIn("resolved_conflicts", updated)
+        self.assertEqual(len(updated["resolved_conflicts"]), 0)
+
+
+class TestResolvedFlipFlopDedup(unittest.TestCase):
+    """Test that resolved entries are cleaned up when conflicts reappear."""
+
+    def test_reappearing_conflict_removed_from_resolved(self):
+        """If a resolved conflict reappears, it should be removed from resolved list."""
+        now = datetime.now(timezone.utc)
+        state = {
+            "conflicts": [],
+            "resolved_conflicts": [
+                {
+                    "repo": "org/repo",
+                    "pr_a": 1,
+                    "pr_b": 2,
+                    "files": ["file.py"],
+                    "first_seen": (now - timedelta(hours=5)).isoformat(),
+                    "resolved_at": (now - timedelta(hours=1)).isoformat(),
+                }
+            ],
+        }
+        # Conflict 1-2 reappears
+        conflicts = {"org/repo": [_make_conflict(1, 2, ["file.py"])]}
+        updated = deduplication.update_state_with_current(conflicts, state)
+
+        self.assertEqual(len(updated["conflicts"]), 1)
+        self.assertEqual(len(updated["resolved_conflicts"]), 0)
+
+    def test_flip_flop_no_duplicates(self):
+        """A conflict that flip-flops should not create duplicate resolved entries."""
+        now = datetime.now(timezone.utc)
+
+        # Run 1: conflict is active
+        state_run1 = {
+            "conflicts": [
+                {
+                    "repo": "org/repo",
+                    "pr_a": 1,
+                    "pr_b": 2,
+                    "files": ["file.py"],
+                    "first_seen": (now - timedelta(hours=5)).isoformat(),
+                }
+            ],
+            "resolved_conflicts": [],
+        }
+
+        # Run 2: conflict resolves
+        updated = deduplication.update_state_with_current({}, state_run1)
+        self.assertEqual(len(updated["resolved_conflicts"]), 1)
+
+        # Run 3: conflict reappears
+        conflicts = {"org/repo": [_make_conflict(1, 2, ["file.py"])]}
+        updated = deduplication.update_state_with_current(conflicts, updated)
+        self.assertEqual(len(updated["conflicts"]), 1)
+        self.assertEqual(len(updated["resolved_conflicts"]), 0)
+
+        # Run 4: conflict resolves again
+        updated = deduplication.update_state_with_current({}, updated)
+        self.assertEqual(len(updated["resolved_conflicts"]), 1)
+
+
+class TestTimezoneNaiveSafety(unittest.TestCase):
+    """Test that timezone-naive timestamps don't crash pruning."""
+
+    def test_prune_handles_naive_active_timestamp(self):
+        """Naive timestamps in active conflicts should not crash."""
+        state = {
+            "conflicts": [
+                {
+                    "repo": "org/repo",
+                    "pr_a": 1,
+                    "pr_b": 2,
+                    "files": ["file.py"],
+                    "first_seen": "2026-01-01T00:00:00",
+                }
+            ]
+        }
+        # Should not raise TypeError
+        pruned = deduplication.prune_expired_conflicts(state)
+        self.assertIsInstance(pruned, dict)
+
+    def test_prune_handles_naive_resolved_timestamp(self):
+        """Naive timestamps in resolved conflicts should not crash."""
+        state = {
+            "conflicts": [],
+            "resolved_conflicts": [
+                {
+                    "repo": "org/repo",
+                    "pr_a": 1,
+                    "pr_b": 2,
+                    "files": ["file.py"],
+                    "first_seen": "2026-01-01T00:00:00",
+                    "resolved_at": "2026-01-01T00:00:00",
+                }
+            ],
+        }
+        pruned = deduplication.prune_expired_conflicts(state)
+        self.assertIsInstance(pruned, dict)
 
 
 if __name__ == "__main__":

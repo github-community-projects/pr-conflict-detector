@@ -3,6 +3,7 @@
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from conflict_detector import ConflictResult, FileOverlap, PRInfo
@@ -11,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 # Bot signature to identify our comments
 COMMENT_SIGNATURE = "<!-- pr-conflict-detector-bot -->"
+
+MAX_RESOLVED_DISPLAY = 10
 
 
 @dataclass
@@ -21,26 +24,51 @@ class ConflictEntry:
     files: list[FileOverlap]
 
 
+@dataclass
+class ResolvedConflictEntry:
+    """A resolved conflict for display in the comment's resolved section."""
+
+    pr_number: int
+    pr_title: str
+    pr_url: str
+    resolved_at: str
+
+
 def post_pr_comments(
-    conflicts_by_repo: dict[str, list[ConflictResult]],
+    all_conflicts_by_repo: dict[str, list[ConflictResult]],
     github_connection: Any,
+    new_conflict_keys: set[tuple[int, int]] | None = None,
+    resolved_entries: list[dict] | None = None,
     dry_run: bool = False,
 ) -> bool:
     """Post consolidated comments on PRs about detected conflicts.
 
     Groups all conflicts for a given PR into a single comment. If an existing
     bot comment is found on the PR, it is updated in place instead of creating
-    a new one.
+    a new one. Includes a resolved conflicts section for previously detected
+    conflicts that have been resolved.
 
     Args:
-        conflicts_by_repo: Dict mapping repo names to conflict results
-        github_connection: Authenticated GitHub connection
-        dry_run: If True, log what would be posted but don't actually post
+        all_conflicts_by_repo: Dict mapping repo names to ALL active conflict results.
+        github_connection: Authenticated GitHub connection.
+        new_conflict_keys: Set of (pr_a, pr_b) tuples for newly detected conflicts
+            (used to render 🆕 badges).
+        resolved_entries: List of resolved conflict dicts from the state file
+            (used to render the resolved section).
+        dry_run: If True, log what would be posted but don't actually post.
 
     Returns:
-        True if all comments posted successfully, False otherwise
+        True if all comments posted successfully, False otherwise.
     """
-    if not conflicts_by_repo or all(len(c) == 0 for c in conflicts_by_repo.values()):
+    # Determine all repos that need processing (active + resolved)
+    all_repo_names = set(all_conflicts_by_repo.keys())
+    if resolved_entries:
+        all_repo_names.update(
+            e.get("repo", "") for e in resolved_entries if e.get("repo")
+        )
+    all_repo_names.discard("")
+
+    if not all_repo_names:
         logger.info("No conflicts to comment on")
         return True
 
@@ -48,19 +76,36 @@ def post_pr_comments(
     total_comments = 0
     total_updates = 0
 
-    for repo_name, conflicts in conflicts_by_repo.items():
-        if not conflicts:
-            continue
-
+    for repo_name in all_repo_names:
+        conflicts = all_conflicts_by_repo.get(repo_name, [])
         owner, repo = repo_name.split("/")
         repo_obj = github_connection.repository(owner, repo)
 
-        # Group conflicts by PR number so each PR gets one consolidated comment
-        pr_conflicts = _group_conflicts_by_pr(conflicts)
+        # Group active conflicts by PR
+        pr_conflicts = _group_conflicts_by_pr(conflicts) if conflicts else {}
 
-        for pr_number, conflict_entries in pr_conflicts.items():
-            comment_body = _build_consolidated_comment(conflict_entries)
+        # Group resolved entries by PR for this repo
+        resolved_by_pr = _group_resolved_by_pr(resolved_entries or [], repo_name)
 
+        # All PRs that need a comment (active or resolved)
+        all_pr_numbers = set(pr_conflicts.keys()) | set(resolved_by_pr.keys())
+
+        for pr_number in all_pr_numbers:
+            active = pr_conflicts.get(pr_number, [])
+            resolved = resolved_by_pr.get(pr_number, [])
+
+            # Compute which other PRs are newly detected
+            new_other_prs: set[int] = set()
+            if new_conflict_keys:
+                for entry in active:
+                    other = entry.other_pr.number
+                    if (pr_number, other) in new_conflict_keys or (
+                        other,
+                        pr_number,
+                    ) in new_conflict_keys:
+                        new_other_prs.add(other)
+
+            comment_body = _build_consolidated_comment(active, new_other_prs, resolved)
             existing_comments = _find_existing_comments(repo_obj, pr_number)
 
             if dry_run:
@@ -157,15 +202,41 @@ def _find_existing_comments(repo: Any, pr_number: int) -> list[Any]:
         return []
 
 
-def _build_consolidated_comment(conflict_entries: list[ConflictEntry]) -> str:
+def _build_consolidated_comment(
+    conflict_entries: list[ConflictEntry],
+    new_pr_numbers: set[int] | None = None,
+    resolved_entries: list[ResolvedConflictEntry] | None = None,
+) -> str:
     """Build a single consolidated comment listing all conflicts for a PR.
 
     Args:
-        conflict_entries: List of ConflictEntry objects.
+        conflict_entries: List of active ConflictEntry objects.
+        new_pr_numbers: PR numbers that are newly detected (for 🆕 badge).
+        resolved_entries: List of resolved conflict entries for the details section.
 
     Returns:
-        Formatted comment body with a table of all conflicting PRs.
+        Formatted comment body with active conflicts table and resolved section.
     """
+    resolved_section = _build_resolved_section(resolved_entries or [])
+    footer = (
+        "\nThis is an automated notification from "
+        "[pr-conflict-detector](https://github.com/github-community-projects/pr-conflict-detector)."
+    )
+    banner = (
+        "\n*🔄 **This comment updates automatically** "
+        "as conflicts are detected and resolved.*\n"
+    )
+
+    if not conflict_entries:
+        return (
+            f"{COMMENT_SIGNATURE}\n"
+            f"## ✅ All Merge Conflicts Resolved\n"
+            f"{banner}\n"
+            f"All previously detected conflicts for this PR have been resolved. 🎉\n"
+            f"{resolved_section}\n"
+            f"{footer}"
+        )
+
     count = len(conflict_entries)
 
     table_rows = []
@@ -174,31 +245,34 @@ def _build_consolidated_comment(conflict_entries: list[ConflictEntry]) -> str:
         if entry.other_pr.author not in authors:
             authors.append(entry.other_pr.author)
 
+        badge = (
+            "🆕" if new_pr_numbers and entry.other_pr.number in new_pr_numbers else ""
+        )
         file_details = ", ".join(
             f"`{fo.filename}` ({_format_ranges(fo.overlapping_ranges)})"
             for fo in entry.files
         )
         table_rows.append(
-            f"| [#{entry.other_pr.number}]({entry.other_pr.url}) ({entry.other_pr.title}) | {file_details} |"
+            f"| {badge} | [#{entry.other_pr.number}]({entry.other_pr.url})"
+            f" ({entry.other_pr.title}) | {file_details} |"
         )
 
     table = "\n".join(table_rows)
     author_mentions = ", ".join(f"@{a}" for a in authors)
 
-    comment = f"""{COMMENT_SIGNATURE}
-## ⚠️ Potential Merge Conflicts Detected
-
-This PR may conflict with **{count}** other PR(s):
-
-| Conflicting PR | Conflicting Files (Lines) |
-|---|---|
-{table}
-
-**What to do:** Review the overlapping changes and coordinate with {author_mentions} to resolve conflicts.
-
-This is an automated notification from [pr-conflict-detector](https://github.com/github-community-projects/pr-conflict-detector)."""
-
-    return comment
+    return (
+        f"{COMMENT_SIGNATURE}\n"
+        f"## ⚠️ Potential Merge Conflicts Detected\n"
+        f"{banner}\n"
+        f"This PR may conflict with **{count}** other PR(s):\n\n"
+        f"| | Conflicting PR | Conflicting Files (Lines) |\n"
+        f"|---|---|---|\n"
+        f"{table}\n\n"
+        f"**What to do:** Review the overlapping changes and coordinate "
+        f"with {author_mentions} to resolve conflicts.\n"
+        f"{resolved_section}\n"
+        f"{footer}"
+    )
 
 
 def _format_ranges(ranges: list[tuple[int, int]]) -> str:
@@ -211,6 +285,104 @@ def _format_ranges(ranges: list[tuple[int, int]]) -> str:
         Formatted string like "L10-L25, L42-L55"
     """
     return ", ".join(f"L{start}-L{end}" for start, end in ranges)
+
+
+def _group_resolved_by_pr(
+    resolved_entries: list[dict], repo_name: str
+) -> dict[int, list[ResolvedConflictEntry]]:
+    """Group resolved conflict entries by PR number for a specific repo.
+
+    Each resolved conflict pair contributes an entry to both PRs involved.
+
+    Args:
+        resolved_entries: List of resolved conflict dicts from state.
+        repo_name: Repository full name to filter by.
+
+    Returns:
+        Dict mapping PR number to a list of ResolvedConflictEntry objects.
+    """
+    grouped: dict[int, list[ResolvedConflictEntry]] = defaultdict(list)
+    for entry in resolved_entries:
+        if entry.get("repo") != repo_name:
+            continue
+
+        # PR A sees PR B as resolved
+        grouped[entry["pr_a"]].append(
+            ResolvedConflictEntry(
+                pr_number=entry["pr_b"],
+                pr_title=entry.get("pr_b_title", "") or f"#{entry['pr_b']}",
+                pr_url=entry.get("pr_b_url", ""),
+                resolved_at=entry.get("resolved_at", ""),
+            )
+        )
+        # PR B sees PR A as resolved
+        grouped[entry["pr_b"]].append(
+            ResolvedConflictEntry(
+                pr_number=entry["pr_a"],
+                pr_title=entry.get("pr_a_title", "") or f"#{entry['pr_a']}",
+                pr_url=entry.get("pr_a_url", ""),
+                resolved_at=entry.get("resolved_at", ""),
+            )
+        )
+    return dict(grouped)
+
+
+def _build_resolved_section(
+    resolved_entries: list[ResolvedConflictEntry],
+) -> str:
+    """Build the collapsed resolved conflicts section.
+
+    Args:
+        resolved_entries: List of resolved conflict entries.
+
+    Returns:
+        Markdown string with collapsed details section, or empty string.
+    """
+    if not resolved_entries:
+        return ""
+
+    # Sort by resolved date, most recent first
+    sorted_entries = sorted(resolved_entries, key=lambda e: e.resolved_at, reverse=True)
+    # Cap display count
+    sorted_entries = sorted_entries[:MAX_RESOLVED_DISPLAY]
+
+    count = len(sorted_entries)
+    rows = []
+    for entry in sorted_entries:
+        date_str = _format_resolved_date(entry.resolved_at)
+        if entry.pr_url:
+            pr_ref = f"[#{entry.pr_number}]({entry.pr_url}) ({entry.pr_title})"
+        else:
+            pr_ref = f"#{entry.pr_number} ({entry.pr_title})"
+        rows.append(f"| ~{pr_ref}~ | {date_str} |")
+
+    table = "\n".join(rows)
+    suffix = "s" if count != 1 else ""
+
+    return (
+        f"\n<details>\n"
+        f"<summary>✅ {count} previously resolved conflict{suffix}</summary>\n\n"
+        f"| Conflicting PR | Resolved |\n"
+        f"|---|---|\n"
+        f"{table}\n\n"
+        f"</details>"
+    )
+
+
+def _format_resolved_date(iso_timestamp: str) -> str:
+    """Format an ISO 8601 timestamp as a readable date.
+
+    Args:
+        iso_timestamp: ISO 8601 formatted timestamp string.
+
+    Returns:
+        Formatted date string like 'Mar 19, 2026'.
+    """
+    try:
+        dt = datetime.fromisoformat(iso_timestamp)
+        return dt.strftime("%b %d, %Y")
+    except (ValueError, TypeError):
+        return "Unknown"
 
 
 def _update_comment(comment: Any, body: str) -> bool:

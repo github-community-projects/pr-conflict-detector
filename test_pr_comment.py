@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pr_comment
 from conflict_detector import ConflictResult, FileOverlap, PRInfo
-from pr_comment import ConflictEntry
+from pr_comment import ConflictEntry, ResolvedConflictEntry
 
 
 def _make_conflict(
@@ -229,6 +229,10 @@ class TestBuildConsolidatedComment(unittest.TestCase):
         self.assertIn("@bob", comment)
         self.assertIn("`src/auth.py`", comment)
         self.assertIn("L15-L20", comment)
+        # Banner text
+        self.assertIn("🔄 **This comment updates automatically**", comment)
+        # 3-column table header
+        self.assertIn("| | Conflicting PR | Conflicting Files (Lines) |", comment)
 
     def test_multiple_conflicts(self):
         """Should list all conflicting PRs in the table."""
@@ -285,6 +289,10 @@ class TestBuildConsolidatedComment(unittest.TestCase):
         # Verify file-to-range attribution: each file's ranges appear next to the filename
         self.assertIn("`file_a.rb` (L5-L15)", comment)
         self.assertIn("`file_b.rb` (L30-L40)", comment)
+        # Banner text
+        self.assertIn("🔄 **This comment updates automatically**", comment)
+        # 3-column table header
+        self.assertIn("| | Conflicting PR | Conflicting Files (Lines) |", comment)
 
 
 class TestGroupConflictsByPR(unittest.TestCase):
@@ -478,6 +486,326 @@ class TestPostComment(unittest.TestCase):
         result = pr_comment._post_comment(repo, 123, "Test comment")
 
         self.assertFalse(result)
+
+
+class TestNewBadge(unittest.TestCase):
+    """Tests for the 🆕 badge on newly detected conflicts."""
+
+    def test_new_badge_shown_for_new_pr(self):
+        """When new_pr_numbers includes a PR number, comment should contain 🆕."""
+        entries = [
+            ConflictEntry(
+                other_pr=PRInfo(
+                    number=456,
+                    url="https://github.com/org/repo/pull/456",
+                    title="New PR",
+                    author="bob",
+                ),
+                files=[FileOverlap("file.py", [(10, 20)], [(15, 25)], [(15, 20)])],
+            )
+        ]
+        comment = pr_comment._build_consolidated_comment(entries, new_pr_numbers={456})
+        self.assertIn("🆕", comment)
+
+    def test_no_badge_when_not_new(self):
+        """When new_pr_numbers doesn't include the PR, no 🆕 should appear."""
+        entries = [
+            ConflictEntry(
+                other_pr=PRInfo(
+                    number=456,
+                    url="https://github.com/org/repo/pull/456",
+                    title="Old PR",
+                    author="bob",
+                ),
+                files=[FileOverlap("file.py", [(10, 20)], [(15, 25)], [(15, 20)])],
+            )
+        ]
+        comment = pr_comment._build_consolidated_comment(entries, new_pr_numbers={999})
+        self.assertNotIn("🆕", comment)
+
+    def test_no_badge_when_none(self):
+        """When new_pr_numbers is None, no 🆕 should appear."""
+        entries = [
+            ConflictEntry(
+                other_pr=PRInfo(
+                    number=456,
+                    url="https://github.com/org/repo/pull/456",
+                    title="PR",
+                    author="bob",
+                ),
+                files=[FileOverlap("file.py", [(10, 20)], [(15, 25)], [(15, 20)])],
+            )
+        ]
+        comment = pr_comment._build_consolidated_comment(entries)
+        self.assertNotIn("🆕", comment)
+
+
+class TestResolvedSection(unittest.TestCase):
+    """Tests for the resolved conflicts section in comments."""
+
+    def test_resolved_section_appears(self):
+        """When resolved_entries are provided, details section should appear."""
+        entries = [
+            ConflictEntry(
+                other_pr=PRInfo(
+                    number=10,
+                    url="https://github.com/org/repo/pull/10",
+                    title="Active",
+                    author="alice",
+                ),
+                files=[FileOverlap("file.py", [(10, 20)], [(15, 25)], [(15, 20)])],
+            )
+        ]
+        resolved = [
+            ResolvedConflictEntry(
+                pr_number=20,
+                pr_title="Old PR",
+                pr_url="https://github.com/org/repo/pull/20",
+                resolved_at="2026-03-15T10:00:00+00:00",
+            ),
+        ]
+        comment = pr_comment._build_consolidated_comment(
+            entries, resolved_entries=resolved
+        )
+
+        self.assertIn("<details>", comment)
+        self.assertIn("previously resolved", comment)
+        self.assertIn("#20", comment)
+        self.assertIn("Old PR", comment)
+
+    def test_no_resolved_section_when_empty(self):
+        """When resolved_entries is empty, no details section should appear."""
+        entries = [
+            ConflictEntry(
+                other_pr=PRInfo(
+                    number=10,
+                    url="https://github.com/org/repo/pull/10",
+                    title="Active",
+                    author="alice",
+                ),
+                files=[FileOverlap("file.py", [(10, 20)], [(15, 25)], [(15, 20)])],
+            )
+        ]
+        comment = pr_comment._build_consolidated_comment(entries, resolved_entries=[])
+        self.assertNotIn("<details>", comment)
+
+
+class TestAllResolvedComment(unittest.TestCase):
+    """Tests for the all-resolved comment when no active conflicts remain."""
+
+    def test_all_resolved_comment(self):
+        """Empty conflict_entries with resolved_entries should show all-resolved header."""
+        resolved = [
+            ResolvedConflictEntry(
+                pr_number=20,
+                pr_title="Old PR",
+                pr_url="https://github.com/org/repo/pull/20",
+                resolved_at="2026-03-15T10:00:00+00:00",
+            ),
+        ]
+        comment = pr_comment._build_consolidated_comment([], resolved_entries=resolved)
+
+        self.assertIn("✅ All Merge Conflicts Resolved", comment)
+        self.assertIn("🔄 **This comment updates automatically**", comment)
+        self.assertIn("<details>", comment)
+        self.assertIn("#20", comment)
+
+
+class TestGroupResolvedByPR(unittest.TestCase):
+    """Tests for _group_resolved_by_pr."""
+
+    def test_groups_by_pr_number(self):
+        """Resolved entries should be grouped by both PR A and PR B."""
+        entries = [
+            {
+                "repo": "org/repo",
+                "pr_a": 1,
+                "pr_b": 2,
+                "pr_a_title": "PR 1",
+                "pr_b_title": "PR 2",
+                "pr_a_url": "http://pr1",
+                "pr_b_url": "http://pr2",
+                "resolved_at": "2026-03-15T10:00:00+00:00",
+            }
+        ]
+        grouped = pr_comment._group_resolved_by_pr(entries, "org/repo")
+
+        # PR 1 should see PR 2 as resolved
+        self.assertIn(1, grouped)
+        self.assertEqual(grouped[1][0].pr_number, 2)
+        self.assertEqual(grouped[1][0].pr_title, "PR 2")
+        # PR 2 should see PR 1 as resolved
+        self.assertIn(2, grouped)
+        self.assertEqual(grouped[2][0].pr_number, 1)
+        self.assertEqual(grouped[2][0].pr_title, "PR 1")
+
+    def test_filters_by_repo(self):
+        """Should only include entries matching the given repo_name."""
+        entries = [
+            {
+                "repo": "org/repo",
+                "pr_a": 1,
+                "pr_b": 2,
+                "pr_a_title": "PR 1",
+                "pr_b_title": "PR 2",
+                "resolved_at": "2026-03-15T10:00:00+00:00",
+            },
+            {
+                "repo": "other/repo",
+                "pr_a": 3,
+                "pr_b": 4,
+                "pr_a_title": "PR 3",
+                "pr_b_title": "PR 4",
+                "resolved_at": "2026-03-15T10:00:00+00:00",
+            },
+        ]
+        grouped = pr_comment._group_resolved_by_pr(entries, "org/repo")
+
+        self.assertIn(1, grouped)
+        self.assertIn(2, grouped)
+        self.assertNotIn(3, grouped)
+        self.assertNotIn(4, grouped)
+
+    def test_empty_entries(self):
+        """Empty entries should produce empty grouping."""
+        grouped = pr_comment._group_resolved_by_pr([], "org/repo")
+        self.assertEqual(grouped, {})
+
+
+class TestBuildResolvedSection(unittest.TestCase):
+    """Tests for _build_resolved_section."""
+
+    def test_empty_resolved_returns_empty(self):
+        """No resolved entries should produce empty string."""
+        result = pr_comment._build_resolved_section([])
+        self.assertEqual(result, "")
+
+    def test_collapsed_html_structure(self):
+        """Should produce details/summary HTML structure."""
+        entries = [
+            ResolvedConflictEntry(
+                pr_number=10,
+                pr_title="PR 10",
+                pr_url="http://pr10",
+                resolved_at="2026-03-15T10:00:00+00:00",
+            ),
+        ]
+        result = pr_comment._build_resolved_section(entries)
+
+        self.assertIn("<details>", result)
+        self.assertIn("</details>", result)
+        self.assertIn("<summary>", result)
+        self.assertIn("1 previously resolved conflict", result)
+        self.assertIn("~", result)  # strikethrough
+
+    def test_plural_summary(self):
+        """Should use plural form for multiple resolved entries."""
+        entries = [
+            ResolvedConflictEntry(
+                pr_number=10,
+                pr_title="PR 10",
+                pr_url="",
+                resolved_at="2026-03-15T10:00:00+00:00",
+            ),
+            ResolvedConflictEntry(
+                pr_number=20,
+                pr_title="PR 20",
+                pr_url="",
+                resolved_at="2026-03-14T10:00:00+00:00",
+            ),
+        ]
+        result = pr_comment._build_resolved_section(entries)
+        self.assertIn("2 previously resolved conflicts", result)
+
+    def test_date_formatting_in_section(self):
+        """Resolved date should be formatted as readable date."""
+        entries = [
+            ResolvedConflictEntry(
+                pr_number=10,
+                pr_title="PR 10",
+                pr_url="http://pr10",
+                resolved_at="2026-03-15T10:00:00+00:00",
+            ),
+        ]
+        result = pr_comment._build_resolved_section(entries)
+        self.assertIn("Mar 15, 2026", result)
+
+    def test_max_display_cap(self):
+        """Should cap the number of resolved entries displayed."""
+        entries = [
+            ResolvedConflictEntry(
+                pr_number=i,
+                pr_title=f"PR {i}",
+                pr_url=f"http://pr{i}",
+                resolved_at=f"2026-03-{15 - (i % 15):02d}T10:00:00+00:00",
+            )
+            for i in range(15)
+        ]
+        result = pr_comment._build_resolved_section(entries)
+        # Should cap at MAX_RESOLVED_DISPLAY (10)
+        self.assertIn(
+            f"{pr_comment.MAX_RESOLVED_DISPLAY} previously resolved conflicts", result
+        )
+
+
+class TestFormatResolvedDate(unittest.TestCase):
+    """Tests for _format_resolved_date."""
+
+    def test_valid_iso_timestamp(self):
+        """Valid ISO timestamp should return formatted date."""
+        result = pr_comment._format_resolved_date("2026-03-15T10:00:00+00:00")
+        self.assertEqual(result, "Mar 15, 2026")
+
+    def test_invalid_timestamp(self):
+        """Invalid timestamp should return 'Unknown'."""
+        result = pr_comment._format_resolved_date("not-a-date")
+        self.assertEqual(result, "Unknown")
+
+    def test_empty_timestamp(self):
+        """Empty string should return 'Unknown'."""
+        result = pr_comment._format_resolved_date("")
+        self.assertEqual(result, "Unknown")
+
+
+class TestPostPRCommentsWithResolved(unittest.TestCase):
+    """Tests for post_pr_comments with resolved_entries."""
+
+    @patch("pr_comment._post_comment", return_value=True)
+    @patch("pr_comment._find_existing_comments", return_value=[])
+    def test_resolved_only_pr_gets_comment(self, _mock_find, mock_post):
+        """PRs that only appear in resolved_entries should still get comments."""
+        # No active conflicts
+        conflicts: dict[str, list] = {}
+        resolved_entries = [
+            {
+                "repo": "org/repo",
+                "pr_a": 1,
+                "pr_b": 2,
+                "pr_a_title": "PR 1",
+                "pr_b_title": "PR 2",
+                "pr_a_url": "http://pr1",
+                "pr_b_url": "http://pr2",
+                "resolved_at": "2026-03-15T10:00:00+00:00",
+            }
+        ]
+
+        gh = MagicMock()
+        repo_mock = MagicMock()
+        gh.repository.return_value = repo_mock
+
+        result = pr_comment.post_pr_comments(
+            conflicts, gh, resolved_entries=resolved_entries
+        )
+
+        self.assertTrue(result)
+        # Both PR #1 and PR #2 should get comments
+        self.assertEqual(mock_post.call_count, 2)
+        posted_prs = {call[0][1] for call in mock_post.call_args_list}
+        self.assertEqual(posted_prs, {1, 2})
+        # Comment should mention all-resolved
+        for call in mock_post.call_args_list:
+            body = call[0][2]
+            self.assertIn("✅ All Merge Conflicts Resolved", body)
 
 
 if __name__ == "__main__":
