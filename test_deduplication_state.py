@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import deduplication
-from conftest import _make_dedup_conflict as _make_conflict
+from test_helpers import _make_dedup_conflict as _make_conflict
 
 
 class TestLoadAndSaveState(unittest.TestCase):

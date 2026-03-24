@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import pr_comment
-from conftest import _make_comment_conflict
+from test_helpers import _make_comment_conflict
 
 
 class TestPostPRComments(unittest.TestCase):

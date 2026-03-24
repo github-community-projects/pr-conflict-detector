@@ -3,8 +3,8 @@
 import unittest
 from unittest.mock import MagicMock
 
-from conftest import _make_env_vars
 from pr_conflict_detector import get_repos_iterator
+from test_helpers import _make_env_vars
 
 
 class TestGetReposIteratorOrg(unittest.TestCase):

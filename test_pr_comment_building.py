@@ -4,8 +4,8 @@ import unittest
 
 import comment_rendering
 from conflict_detector import FileOverlap, PRInfo
-from conftest import _make_comment_conflict
 from pr_comment import ConflictEntry, ResolvedConflictEntry
+from test_helpers import _make_comment_conflict
 
 
 class TestBuildConsolidatedComment(unittest.TestCase):

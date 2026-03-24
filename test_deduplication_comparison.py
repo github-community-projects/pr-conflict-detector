@@ -4,7 +4,7 @@ import unittest
 from datetime import datetime, timezone
 
 import deduplication
-from conftest import _make_dedup_conflict as _make_conflict
+from test_helpers import _make_dedup_conflict as _make_conflict
 
 
 class TestCompareConflicts(unittest.TestCase):

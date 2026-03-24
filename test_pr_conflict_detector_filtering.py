@@ -3,14 +3,14 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from conftest import (
+from pr_conflict_detector import main
+from test_helpers import (
     _make_env_vars,
     _make_pr,
     _make_repo,
     _mock_dedup_passthrough,
     _mock_fetch_with_filter,
 )
-from pr_conflict_detector import main
 
 
 @patch("pr_conflict_detector.deduplication", new=_mock_dedup_passthrough())
