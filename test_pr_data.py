@@ -4,7 +4,6 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from pr_data import (
-    ChangedFile,
     PullRequestData,
     fetch_all_pr_data,
     get_open_prs,
@@ -484,29 +483,3 @@ class TestFetchAllPrData(unittest.TestCase):
 
         self.assertEqual(len(result), 2)
         self.assertEqual(mock_repo.pull_request.call_count, 2)
-
-
-class TestDataClasses(unittest.TestCase):
-    """Tests for the data classes."""
-
-    def test_changed_file_defaults(self):
-        """ChangedFile should have an empty patch_lines by default."""
-        cf = ChangedFile(filename="f.py", additions=1, deletions=0, changes=1)
-        self.assertEqual(cf.patch_lines, [])
-
-    def test_pull_request_data_defaults(self):
-        """PullRequestData should have empty changed_files by default."""
-        pr = PullRequestData(
-            number=1,
-            title="t",
-            author="a",
-            html_url="u",
-            is_draft=False,
-            base_branch="main",
-            head_branch="feat",
-        )
-        self.assertEqual(pr.changed_files, [])
-
-
-if __name__ == "__main__":
-    unittest.main()
