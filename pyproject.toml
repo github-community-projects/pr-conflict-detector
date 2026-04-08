@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "Detect pull request conflicts and notify"
 requires-python = ">=3.11"
 dependencies = [
-    "cryptography==46.0.6",
+    "cryptography==46.0.7",
     "github3-py==4.0.1",
     "pyjwt==2.12.1",
     "python-dotenv==1.2.2",
