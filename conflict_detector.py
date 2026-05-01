@@ -75,21 +75,27 @@ def find_overlapping_ranges(
 def find_file_overlaps(prs: list[PullRequestData]) -> list[ConflictResult]:
     """Find PR pairs with overlapping file and line changes.
 
-    Builds an index of filename -> list of (pr, ChangedFile) tuples, then checks
-    line range overlaps only within file groups. This is O(n) for building the index,
-    then pairwise only within file groups — much more efficient than O(n²) full
-    pairwise comparison.
+    Builds an index of (base_branch, filename) -> list of (pr, ChangedFile) tuples,
+    then checks line range overlaps only within groups sharing the same base branch
+    and file. PRs targeting different base branches cannot conflict at merge time
+    and are not compared (this avoids false positives for stacked PRs).
     """
-    # Build file index: filename -> list of (pr, changed_file)
-    file_index: dict[str, list[tuple[PullRequestData, ChangedFile]]] = defaultdict(list)
+    # Build file index keyed by (base_branch, filename) so only PRs targeting
+    # the same branch are compared — PRs targeting different branches can't
+    # conflict at merge time.
+    file_index: dict[tuple[str, str], list[tuple[PullRequestData, ChangedFile]]] = (
+        defaultdict(list)
+    )
     for pr in prs:
+        base = pr.base_branch or ""
         for changed_file in pr.changed_files:
-            file_index[changed_file.filename].append((pr, changed_file))
+            key = (base, changed_file.filename)
+            file_index[key].append((pr, changed_file))
 
     # Track conflicts by PR pair to group multiple file overlaps together
     pair_conflicts: dict[tuple[int, int], ConflictResult] = {}
 
-    for filename, pr_file_pairs in file_index.items():
+    for (_base_branch, filename), pr_file_pairs in file_index.items():
         if len(pr_file_pairs) < 2:
             continue
 
