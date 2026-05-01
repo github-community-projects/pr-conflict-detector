@@ -106,6 +106,8 @@ def _make_pr(
     files: list[ChangedFile] | None = None,
     title: str = "",
     author: str = "user",
+    base_branch: str = "main",
+    head_branch: str = "",
 ) -> PullRequestData:
     """Helper to create a PullRequestData for tests."""
     return PullRequestData(
@@ -114,8 +116,8 @@ def _make_pr(
         author=author,
         html_url=f"https://github.com/owner/repo/pull/{number}",
         is_draft=False,
-        base_branch="main",
-        head_branch=f"feature-{number}",
+        base_branch=base_branch,
+        head_branch=head_branch or f"feature-{number}",
         changed_files=files or [],
     )
 
@@ -220,6 +222,59 @@ class TestFindFileOverlaps(unittest.TestCase):
         assert len(results) == 1
         assert results[0].pr_a.number == 5
         assert results[0].pr_b.number == 10
+
+    def test_different_base_branches_no_conflict(self):
+        """PRs targeting different base branches should not be compared."""
+        pr_a = _make_pr(1, [_make_file("file.py", [(1, 10)])], base_branch="main")
+        pr_b = _make_pr(2, [_make_file("file.py", [(5, 15)])], base_branch="develop")
+
+        results = find_file_overlaps([pr_a, pr_b])
+        assert len(results) == 0
+
+    def test_stacked_prs_no_conflict(self):
+        """Stacked PRs (b targets a's branch) should not be flagged.
+
+        This is the scenario from issue #78: PR `a` targets `main`, PR `b`
+        targets branch `a`. They naturally touch the same files but aren't
+        conflicting because they're intentionally stacked.
+        """
+        pr_a = _make_pr(
+            1,
+            [_make_file("file.py", [(1, 10)])],
+            base_branch="main",
+            head_branch="feature-a",
+        )
+        pr_b = _make_pr(
+            2,
+            [_make_file("file.py", [(5, 15)])],
+            base_branch="feature-a",
+            head_branch="feature-b",
+        )
+
+        results = find_file_overlaps([pr_a, pr_b])
+        assert len(results) == 0
+
+    def test_same_base_branch_still_conflicts(self):
+        """PRs targeting the same base branch with overlapping changes conflict."""
+        pr_a = _make_pr(1, [_make_file("file.py", [(1, 10)])], base_branch="main")
+        pr_b = _make_pr(2, [_make_file("file.py", [(5, 15)])], base_branch="main")
+
+        results = find_file_overlaps([pr_a, pr_b])
+        assert len(results) == 1
+
+    def test_mixed_base_branches_only_same_base_conflicts(self):
+        """Only PRs sharing a base branch should be compared for conflicts."""
+        # These two target main and overlap
+        pr_a = _make_pr(1, [_make_file("file.py", [(1, 10)])], base_branch="main")
+        pr_b = _make_pr(2, [_make_file("file.py", [(5, 15)])], base_branch="main")
+        # This one targets develop — same file/lines but should be ignored
+        pr_c = _make_pr(3, [_make_file("file.py", [(1, 10)])], base_branch="develop")
+
+        results = find_file_overlaps([pr_a, pr_b, pr_c])
+
+        assert len(results) == 1
+        assert results[0].pr_a.number == 1
+        assert results[0].pr_b.number == 2
 
 
 class TestDetectConflicts(unittest.TestCase):
