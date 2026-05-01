@@ -87,8 +87,9 @@ def find_file_overlaps(prs: list[PullRequestData]) -> list[ConflictResult]:
         defaultdict(list)
     )
     for pr in prs:
+        base = pr.base_branch or ""
         for changed_file in pr.changed_files:
-            key = (pr.base_branch, changed_file.filename)
+            key = (base, changed_file.filename)
             file_index[key].append((pr, changed_file))
 
     # Track conflicts by PR pair to group multiple file overlaps together
