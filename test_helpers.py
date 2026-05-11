@@ -102,6 +102,7 @@ def _make_env_vars(**overrides):
         "enable_github_actions_step_summary": False,
         "filter_authors": [],
         "filter_teams": [],
+        "exclude_authors": [],
         "enable_pr_comments": False,
         "enable_report_issues": True,
     }
@@ -141,7 +142,7 @@ def _mock_fetch_with_filter(prs):
 
     def side_effect(*_args, **kwargs):
         filter_authors = kwargs.get("filter_authors")
-        if filter_authors:
+        if filter_authors is not None:
             return [pr for pr in prs if pr.author in filter_authors]
         return list(prs)
 

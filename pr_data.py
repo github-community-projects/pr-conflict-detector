@@ -152,7 +152,7 @@ def fetch_all_pr_data(
     """
     prs = get_open_prs(repo, include_drafts)
 
-    if filter_authors:
+    if filter_authors is not None:
         before_count = len(prs)
         prs = [pr for pr in prs if pr.author in filter_authors]
         print(

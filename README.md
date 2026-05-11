@@ -106,6 +106,7 @@ The required GitHub App permissions under `Repository permissions` are:
 | `ENABLE_GITHUB_ACTIONS_STEP_SUMMARY` | False    | `true`                  | If set to `true`, the conflict report will be written to the GitHub Actions workflow summary for easy viewing in the Actions UI.                                                                          |
 | `FILTER_AUTHORS`                     | False    | `""`                    | A comma-separated list of GitHub usernames. When set, only PRs authored by these users will be analyzed for conflicts. Useful for incremental rollout to specific teams. Example: `alice,bob,charlie`     |
 | `FILTER_TEAMS`                       | False    | `""`                    | A comma-separated list of GitHub teams (`org/team-slug`). Members are resolved at runtime and merged with `FILTER_AUTHORS`. Requires `read:org` scope. Example: `my-org/frontend,my-org/backend`          |
+| `EXCLUDE_AUTHORS`                    | False    | `""`                    | A comma-separated list of GitHub usernames to exclude from conflict detection. Applied after `FILTER_TEAMS` resolution, allowing specific team members to opt out without leaving the team. Example: `bot-user,on-leave-dev` |
 | `ENABLE_PR_COMMENTS`                 | False    | `false`                 | If set to `true`, the action will post comments on PRs about detected conflicts. Comments include conflicting files, line ranges, and links to the other PR. See [PR Comments](#pr-comments) for details. |
 | `ENABLE_REPORT_ISSUES`               | False    | `true`                  | If set to `true`, the action will create/update conflict report issues in each repository. Set to `false` to disable issue creation while keeping PR comments and step summaries.                         |
 
@@ -291,6 +292,14 @@ You can also combine `FILTER_TEAMS` with `FILTER_AUTHORS` — the members are me
 env:
   FILTER_TEAMS: "my-org/frontend-team"
   FILTER_AUTHORS: "alice,bob" # Additional individual users
+```
+
+To exclude specific users from the resolved team list (e.g., bots or people on leave), use `EXCLUDE_AUTHORS`:
+
+```yaml
+env:
+  FILTER_TEAMS: "my-org/frontend-team"
+  EXCLUDE_AUTHORS: "bot-user,on-leave-dev"
 ```
 
 As confidence grows, expand the team list or remove the filters entirely to cover all PRs.

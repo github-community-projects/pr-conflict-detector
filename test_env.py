@@ -32,6 +32,7 @@ class TestEnv(unittest.TestCase):
             "VERIFY_CONFLICTS",
             "FILTER_AUTHORS",
             "FILTER_TEAMS",
+            "EXCLUDE_AUTHORS",
         ]
         for key in env_keys:
             if key in os.environ:
@@ -80,6 +81,7 @@ class TestEnv(unittest.TestCase):
             enable_report_issues=True,
             filter_authors=[],
             filter_teams=[],
+            exclude_authors=[],
         )
         result = get_env_vars(True)
         self.assertEqual(result, expected_result)
@@ -115,6 +117,7 @@ class TestEnv(unittest.TestCase):
             enable_github_actions_step_summary=True,
             filter_authors=[],
             filter_teams=[],
+            exclude_authors=[],
             enable_pr_comments=False,
             enable_report_issues=True,
         )
@@ -152,6 +155,7 @@ class TestEnv(unittest.TestCase):
             enable_github_actions_step_summary=True,
             filter_authors=[],
             filter_teams=[],
+            exclude_authors=[],
             enable_pr_comments=False,
             enable_report_issues=True,
         )
@@ -428,6 +432,34 @@ class TestEnv(unittest.TestCase):
         """Test that team entries with empty org part raise ValueError"""
         with self.assertRaises(ValueError):
             get_env_vars(True)
+
+    @patch.dict(
+        os.environ,
+        {
+            "ORGANIZATION": "my_organization",
+            "GH_TOKEN": "my_token",
+            "EXCLUDE_AUTHORS": "alice, @bob , charlie",
+        },
+        clear=True,
+    )
+    def test_get_env_vars_exclude_authors(self):
+        """Test that EXCLUDE_AUTHORS parses correctly with @ prefix stripping"""
+        result = get_env_vars(True)
+        self.assertEqual(result.exclude_authors, ["alice", "bob", "charlie"])
+
+    @patch.dict(
+        os.environ,
+        {
+            "ORGANIZATION": "my_organization",
+            "GH_TOKEN": "my_token",
+            "EXCLUDE_AUTHORS": "",
+        },
+        clear=True,
+    )
+    def test_get_env_vars_exclude_authors_defaults_to_empty(self):
+        """Test that empty or unset EXCLUDE_AUTHORS results in empty list"""
+        result = get_env_vars(True)
+        self.assertEqual(result.exclude_authors, [])
 
 
 if __name__ == "__main__":
