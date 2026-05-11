@@ -57,9 +57,12 @@ def main():
             )
 
     # 2c. Remove excluded authors
-    filtering_requested = bool(env_vars.filter_authors or env_vars.filter_teams)
+    # Derive from the resolved set, not env var presence. When teams resolve
+    # to zero members and no FILTER_AUTHORS are set, this stays False so we
+    # fall back to scanning all PRs (matching the warning above).
+    filtering_requested = bool(combined_filter_authors)
     if env_vars.exclude_authors:
-        if not filtering_requested:
+        if not env_vars.filter_authors and not env_vars.filter_teams:
             print(
                 "  ⚠️  EXCLUDE_AUTHORS has no effect without"
                 " FILTER_AUTHORS or FILTER_TEAMS"

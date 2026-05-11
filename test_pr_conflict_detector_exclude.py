@@ -134,3 +134,34 @@ class TestExcludeAuthors(unittest.TestCase):
         warns = [c for c in mock_print.call_args_list if "no effect" in str(c)]
         self.assertEqual(len(warns), 1)
         self.assertEqual(len(mock_detect.call_args[0][0]), 2)
+
+    @patch("pr_conflict_detector.auth.get_team_members")
+    def test_empty_team_resolution_scans_all_prs(
+        self, mock_get_team, mock_get_env, mock_auth, mock_fetch, mock_detect, *_
+    ):
+        """When FILTER_TEAMS resolves to zero members, all PRs are scanned."""
+        repo = _make_repo("test-org/repo-a")
+        mock_get_env.return_value = _make_env_vars(filter_teams=["test-org/empty-team"])
+        self._setup_org(mock_auth, repo)
+        mock_get_team.return_value = []
+
+        pr_alice = _make_pr(1, author="alice")
+        pr_bob = _make_pr(2, author="bob")
+        mock_fetch.side_effect = _mock_fetch_with_filter([pr_alice, pr_bob])
+        mock_detect.return_value = []
+
+        with patch("builtins.print") as mock_print:
+            main()
+
+        # filter_authors should be None (scan all), not empty set
+        mock_fetch.assert_called_once()
+        _, kwargs = mock_fetch.call_args
+        self.assertIsNone(kwargs.get("filter_authors"))
+
+        # Warning should have fired
+        warns = [c for c in mock_print.call_args_list if "No valid teams" in str(c)]
+        self.assertEqual(len(warns), 1)
+
+        # All PRs should be scanned
+        mock_detect.assert_called_once()
+        self.assertEqual(len(mock_detect.call_args[0][0]), 2)
