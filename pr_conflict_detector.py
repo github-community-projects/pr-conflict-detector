@@ -56,6 +56,30 @@ def main():
                 " — no author filtering will be applied"
             )
 
+    # 2c. Remove excluded authors
+    # Derive from the resolved set, not env var presence. When teams resolve
+    # to zero members and no FILTER_AUTHORS are set, this stays False so we
+    # fall back to scanning all PRs (matching the warning above).
+    filtering_requested = bool(combined_filter_authors)
+    if env_vars.exclude_authors:
+        if not env_vars.filter_authors and not env_vars.filter_teams:
+            print(
+                "  ⚠️  EXCLUDE_AUTHORS has no effect without"
+                " FILTER_AUTHORS or FILTER_TEAMS"
+            )
+        else:
+            excluded = set(env_vars.exclude_authors)
+            before_count = len(combined_filter_authors)
+            combined_filter_authors -= excluded
+            removed = before_count - len(combined_filter_authors)
+            if removed:
+                print(
+                    f"Excluded {removed} author(s) via EXCLUDE_AUTHORS "
+                    f"({len(combined_filter_authors)} remaining)"
+                )
+            else:
+                print("EXCLUDE_AUTHORS set but no matching authors found to exclude")
+
     # 3. Get repositories to scan
     repos = get_repos_iterator(github_connection, env_vars)
 
@@ -85,7 +109,7 @@ def main():
             github_connection,
             owner,
             repo_name,
-            filter_authors=combined_filter_authors or None,
+            filter_authors=combined_filter_authors if filtering_requested else None,
         )
 
         # Filter exempt PRs

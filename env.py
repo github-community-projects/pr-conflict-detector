@@ -33,6 +33,7 @@ class EnvVars:  # pylint: disable=too-many-instance-attributes
     enable_github_actions_step_summary: bool
     filter_authors: list[str]
     filter_teams: list[str]
+    exclude_authors: list[str]
     enable_pr_comments: bool
     enable_report_issues: bool
 
@@ -170,6 +171,16 @@ def get_env_vars(test: bool = False) -> EnvVars:
             if author.strip()
         ]
 
+    # Parse exclude authors
+    exclude_authors_str = os.getenv("EXCLUDE_AUTHORS")
+    exclude_authors: list[str] = []
+    if exclude_authors_str:
+        exclude_authors = [
+            author.strip().lstrip("@")
+            for author in exclude_authors_str.split(",")
+            if author.strip()
+        ]
+
     # Parse filter teams (org/team-slug format)
     filter_teams_str = os.getenv("FILTER_TEAMS")
     filter_teams: list[str] = []
@@ -210,6 +221,7 @@ def get_env_vars(test: bool = False) -> EnvVars:
         enable_github_actions_step_summary=enable_github_actions_step_summary,
         filter_authors=filter_authors,
         filter_teams=filter_teams,
+        exclude_authors=exclude_authors,
         enable_pr_comments=enable_pr_comments,
         enable_report_issues=enable_report_issues,
     )
