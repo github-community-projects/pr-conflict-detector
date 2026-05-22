@@ -8,7 +8,7 @@ dependencies = [
     "github3-py==4.0.1",
     "pyjwt==2.12.1",
     "python-dotenv==1.2.2",
-    "requests==2.33.1",
+    "requests==2.34.2",
 ]
 
 [dependency-groups]
