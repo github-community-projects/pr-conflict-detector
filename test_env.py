@@ -462,5 +462,32 @@ class TestEnv(unittest.TestCase):
         self.assertEqual(result.exclude_authors, [])
 
 
+class TestEnvFilterTeamsEdgeCases(unittest.TestCase):
+    """Edge cases for FILTER_TEAMS parsing.
+
+    Lives in a sibling class (rather than TestEnv) so TestEnv stays under
+    pylint's max-public-methods threshold.
+    """
+
+    def setUp(self):
+        for key in ("ORGANIZATION", "GH_TOKEN", "FILTER_TEAMS"):
+            if key in os.environ:
+                del os.environ[key]
+
+    @patch.dict(
+        os.environ,
+        {
+            "ORGANIZATION": "my_organization",
+            "GH_TOKEN": "my_token",
+            "FILTER_TEAMS": "my-org/team-a, , my-org/team-b",
+        },
+        clear=True,
+    )
+    def test_filter_teams_skips_empty_comma_separated_entries(self):
+        """Empty entries between commas (after stripping whitespace) should be skipped."""
+        result = get_env_vars(True)
+        self.assertEqual(result.filter_teams, ["my-org/team-a", "my-org/team-b"])
+
+
 if __name__ == "__main__":
     unittest.main()

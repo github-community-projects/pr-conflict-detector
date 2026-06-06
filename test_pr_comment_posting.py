@@ -104,6 +104,82 @@ class TestPostPRComments(unittest.TestCase):
         self.assertIn("#3", body)
         self.assertIn("**2**", body)
 
+    @patch("pr_comment._post_comment", return_value=True)
+    @patch("pr_comment._find_existing_comments", return_value=[])
+    def test_post_pr_comments_with_new_conflict_keys(self, _mock_find, mock_post):
+        """Newly detected conflicts should render with the 🆕 badge via new_conflict_keys."""
+        conflict = _make_comment_conflict()
+        conflicts = {"org/repo": [conflict]}
+
+        gh = MagicMock()
+        gh.repository.return_value = MagicMock()
+
+        new_keys = {(1, 2)}
+        result = pr_comment.post_pr_comments(conflicts, gh, new_conflict_keys=new_keys)
+
+        self.assertTrue(result)
+        self.assertEqual(mock_post.call_count, 2)
+
+        # Each comment body should contain the 🆕 badge next to the OTHER PR.
+        # _post_comment(repo, pr_number, body) — pr_number=positional[1], body=positional[2].
+        bodies_by_pr = {call.args[1]: call.args[2] for call in mock_post.call_args_list}
+        self.assertIn("🆕", bodies_by_pr[1])
+        self.assertIn("🆕", bodies_by_pr[2])
+
+    @patch("pr_comment._post_comment", return_value=True)
+    @patch("pr_comment._find_existing_comments", return_value=[])
+    def test_post_pr_comments_new_conflict_keys_reverse_pair(
+        self, _mock_find, mock_post
+    ):
+        """The reversed (other, pr_number) tuple should also be detected as new."""
+        conflict = _make_comment_conflict()
+        conflicts = {"org/repo": [conflict]}
+
+        gh = MagicMock()
+        gh.repository.return_value = MagicMock()
+
+        # Only the reversed tuple is present — the disjunction's second half must fire.
+        new_keys = {(2, 1)}
+        result = pr_comment.post_pr_comments(conflicts, gh, new_conflict_keys=new_keys)
+
+        self.assertTrue(result)
+        self.assertEqual(mock_post.call_count, 2)
+
+        bodies_by_pr = {call.args[1]: call.args[2] for call in mock_post.call_args_list}
+        # Without the (other, pr_number) branch, neither body would contain 🆕.
+        self.assertIn("🆕", bodies_by_pr[1])
+        self.assertIn("🆕", bodies_by_pr[2])
+
+    @patch("pr_comment._post_comment", return_value=False)
+    @patch("pr_comment._find_existing_comments", return_value=[])
+    def test_post_pr_comments_post_failure_returns_false(self, _mock_find, _mock_post):
+        """If posting a new comment fails, the overall return should be False."""
+        conflict = _make_comment_conflict()
+        conflicts = {"org/repo": [conflict]}
+
+        gh = MagicMock()
+        gh.repository.return_value = MagicMock()
+
+        result = pr_comment.post_pr_comments(conflicts, gh)
+        self.assertFalse(result)
+
+    @patch("pr_comment._update_comment", return_value=False)
+    @patch("pr_comment._find_existing_comments")
+    def test_post_pr_comments_update_failure_returns_false(
+        self, mock_find, _mock_update
+    ):
+        """If updating an existing comment fails, the overall return should be False."""
+        conflict = _make_comment_conflict()
+        conflicts = {"org/repo": [conflict]}
+
+        mock_find.return_value = [MagicMock()]
+
+        gh = MagicMock()
+        gh.repository.return_value = MagicMock()
+
+        result = pr_comment.post_pr_comments(conflicts, gh)
+        self.assertFalse(result)
+
 
 class TestFindExistingComments(unittest.TestCase):
     """Tests for the _find_existing_comments function."""
