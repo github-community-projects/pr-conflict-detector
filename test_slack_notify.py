@@ -90,9 +90,17 @@ class TestSendSlackNotification(unittest.TestCase):
         )
         self.assertTrue(result)
 
+    @patch("slack_notify.cluster_conflicts", wraps=slack_notify.cluster_conflicts)
     @patch("slack_notify.post_to_slack", return_value=True)
-    def test_send_slack_notification_skips_repo_with_empty_list(self, mock_post):
-        """A repo with an empty conflict list mixed with non-empty repos is skipped."""
+    def test_send_slack_notification_skips_repo_with_empty_list(
+        self, mock_post, mock_cluster
+    ):
+        """A repo with an empty conflict list mixed with non-empty repos is skipped.
+
+        The `continue` at slack_notify.py:42-43 short-circuits before cluster_conflicts
+        is called, so a real skip is observable as cluster_conflicts being called once
+        (for the non-empty repo) rather than twice.
+        """
         conflicts = {
             "org/empty-repo": [],
             "org/repo": [_make_conflict()],
@@ -101,8 +109,10 @@ class TestSendSlackNotification(unittest.TestCase):
             "https://hooks.slack.com/test", conflicts
         )
         self.assertTrue(result)
-        # post_to_slack should only have been called for the non-empty repo
         self.assertEqual(mock_post.call_count, 1)
+        # cluster_conflicts must only run for the non-empty repo; deleting the
+        # `continue` would cause it to run twice (once with `[]`).
+        self.assertEqual(mock_cluster.call_count, 1)
 
     @patch("slack_notify.post_to_slack")
     def test_send_slack_notification_dry_run(self, mock_post):

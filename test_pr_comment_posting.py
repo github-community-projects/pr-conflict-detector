@@ -114,12 +114,17 @@ class TestPostPRComments(unittest.TestCase):
         gh = MagicMock()
         gh.repository.return_value = MagicMock()
 
-        # Pass new_conflict_keys to exercise the badge-computation branch
         new_keys = {(1, 2)}
         result = pr_comment.post_pr_comments(conflicts, gh, new_conflict_keys=new_keys)
 
         self.assertTrue(result)
         self.assertEqual(mock_post.call_count, 2)
+
+        # Each comment body should contain the 🆕 badge next to the OTHER PR.
+        # _post_comment(repo, pr_number, body) — pr_number=positional[1], body=positional[2].
+        bodies_by_pr = {call.args[1]: call.args[2] for call in mock_post.call_args_list}
+        self.assertIn("🆕", bodies_by_pr[1])
+        self.assertIn("🆕", bodies_by_pr[2])
 
     @patch("pr_comment._post_comment", return_value=True)
     @patch("pr_comment._find_existing_comments", return_value=[])
@@ -133,12 +138,17 @@ class TestPostPRComments(unittest.TestCase):
         gh = MagicMock()
         gh.repository.return_value = MagicMock()
 
-        # Reversed tuple should still match the conflict
+        # Only the reversed tuple is present — the disjunction's second half must fire.
         new_keys = {(2, 1)}
         result = pr_comment.post_pr_comments(conflicts, gh, new_conflict_keys=new_keys)
 
         self.assertTrue(result)
         self.assertEqual(mock_post.call_count, 2)
+
+        bodies_by_pr = {call.args[1]: call.args[2] for call in mock_post.call_args_list}
+        # Without the (other, pr_number) branch, neither body would contain 🆕.
+        self.assertIn("🆕", bodies_by_pr[1])
+        self.assertIn("🆕", bodies_by_pr[2])
 
     @patch("pr_comment._post_comment", return_value=False)
     @patch("pr_comment._find_existing_comments", return_value=[])

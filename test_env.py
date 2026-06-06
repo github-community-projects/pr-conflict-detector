@@ -463,7 +463,11 @@ class TestEnv(unittest.TestCase):
 
 
 class TestEnvFilterTeamsEdgeCases(unittest.TestCase):
-    """Edge cases for FILTER_TEAMS parsing kept separate to keep TestEnv focused."""
+    """Edge cases for FILTER_TEAMS parsing.
+
+    Lives in a sibling class (rather than TestEnv) so TestEnv stays under
+    pylint's max-public-methods threshold.
+    """
 
     def setUp(self):
         for key in ("ORGANIZATION", "GH_TOKEN", "FILTER_TEAMS"):
