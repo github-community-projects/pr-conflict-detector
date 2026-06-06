@@ -90,6 +90,20 @@ class TestSendSlackNotification(unittest.TestCase):
         )
         self.assertTrue(result)
 
+    @patch("slack_notify.post_to_slack", return_value=True)
+    def test_send_slack_notification_skips_repo_with_empty_list(self, mock_post):
+        """A repo with an empty conflict list mixed with non-empty repos is skipped."""
+        conflicts = {
+            "org/empty-repo": [],
+            "org/repo": [_make_conflict()],
+        }
+        result = slack_notify.send_slack_notification(
+            "https://hooks.slack.com/test", conflicts
+        )
+        self.assertTrue(result)
+        # post_to_slack should only have been called for the non-empty repo
+        self.assertEqual(mock_post.call_count, 1)
+
     @patch("slack_notify.post_to_slack")
     def test_send_slack_notification_dry_run(self, mock_post):
         """Dry-run mode should return True but never call post_to_slack."""
