@@ -156,9 +156,9 @@ def verify_conflict(
     when VERIFY_CONFLICTS=true.
     """
     try:
-        repo = github_connection.repository(owner, repo_name)  # type: ignore[union-attr]
-        pr_a = repo.pull_request(conflict.pr_a.number)
-        pr_b = repo.pull_request(conflict.pr_b.number)
+        repo = github_connection.get_repo(f"{owner}/{repo_name}")  # type: ignore[union-attr]
+        pr_a = repo.get_pull(conflict.pr_a.number)
+        pr_b = repo.get_pull(conflict.pr_b.number)
 
         # If either PR is not mergeable on its own, they likely conflict
         if pr_a.mergeable is False or pr_b.mergeable is False:

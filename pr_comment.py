@@ -71,7 +71,7 @@ def post_pr_comments(
     for repo_name in all_repo_names:
         conflicts = all_conflicts_by_repo.get(repo_name, [])
         owner, repo = repo_name.split("/")
-        repo_obj = github_connection.repository(owner, repo)
+        repo_obj = github_connection.get_repo(f"{owner}/{repo}")
 
         # Group active conflicts by PR
         pr_conflicts = group_conflicts_by_pr(conflicts) if conflicts else {}
@@ -163,8 +163,8 @@ def _find_existing_comments(repo: Any, pr_number: int) -> list[Any]:
         List of comment objects with the bot signature (may be empty).
     """
     try:
-        pr = repo.pull_request(pr_number)
-        return [c for c in pr.issue_comments() if COMMENT_SIGNATURE in c.body]
+        pr = repo.get_pull(pr_number)
+        return [c for c in pr.get_issue_comments() if COMMENT_SIGNATURE in c.body]
     except Exception as e:  # pylint: disable=broad-except
         logger.warning("Failed to check existing comments on PR #%s: %s", pr_number, e)
         return []
@@ -222,8 +222,8 @@ def _post_comment(repo, pr_number: int, body: str) -> bool:
         True if successful, False otherwise
     """
     try:
-        pr = repo.pull_request(pr_number)
-        pr.create_comment(body)
+        pr = repo.get_pull(pr_number)
+        pr.create_issue_comment(body=body)
         logger.info("Posted comment to PR #%s", pr_number)
         return True
     except Exception as e:  # pylint: disable=broad-except

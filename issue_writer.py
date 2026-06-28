@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from conflict_detector import ConflictCluster, cluster_conflicts
 
 if TYPE_CHECKING:
-    from github3.repos.repo import Repository
+    from github.Repository import Repository
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ def create_or_update_issue(
     """Create or update an issue in the repository with conflict information.
 
     Args:
-        repo: A github3.py repository object.
+        repo: A PyGithub repository object.
         conflicts: List of ConflictResult objects for this repository.
         report_title: Title for the issue.
         dry_run: If True, log what would happen but make no API calls.
@@ -67,7 +67,7 @@ def create_or_update_issue(
 
 def _find_existing_issue(repo: Repository, title: str):
     """Search open issues for one matching the given title and hidden tag."""
-    for issue in repo.issues(state="open"):
+    for issue in repo.get_issues(state="open"):
         if issue.title == title and ISSUE_TAG in (issue.body or ""):
             return issue
     return None

@@ -45,8 +45,8 @@ class TestSkipsExemptRepos(unittest.TestCase):
         gh = MagicMock()
         mock_auth.return_value = gh
         org_mock = MagicMock()
-        org_mock.repositories.return_value = [exempt_repo, normal_repo]
-        gh.organization.return_value = org_mock
+        org_mock.get_repos.return_value = [exempt_repo, normal_repo]
+        gh.get_organization.return_value = org_mock
 
         mock_fetch.return_value = [_make_pr(1)]  # only 1 PR, won't detect
 
@@ -91,8 +91,8 @@ class TestSkipsArchivedRepos(unittest.TestCase):
         gh = MagicMock()
         mock_auth.return_value = gh
         org_mock = MagicMock()
-        org_mock.repositories.return_value = [archived, active]
-        gh.organization.return_value = org_mock
+        org_mock.get_repos.return_value = [archived, active]
+        gh.get_organization.return_value = org_mock
 
         mock_fetch.return_value = [_make_pr(1)]
 
@@ -135,8 +135,8 @@ class TestSkipsReposWithFewerThan2PRs(unittest.TestCase):
         gh = MagicMock()
         mock_auth.return_value = gh
         org_mock = MagicMock()
-        org_mock.repositories.return_value = [repo]
-        gh.organization.return_value = org_mock
+        org_mock.get_repos.return_value = [repo]
+        gh.get_organization.return_value = org_mock
 
         mock_fetch.return_value = [_make_pr(1)]  # Only 1 PR
 
@@ -177,8 +177,8 @@ class TestExemptPRsFiltered(unittest.TestCase):
         gh = MagicMock()
         mock_auth.return_value = gh
         org_mock = MagicMock()
-        org_mock.repositories.return_value = [repo]
-        gh.organization.return_value = org_mock
+        org_mock.get_repos.return_value = [repo]
+        gh.get_organization.return_value = org_mock
 
         pr1, pr2, pr3 = _make_pr(1), _make_pr(2), _make_pr(3)
         mock_fetch.return_value = [pr1, pr2, pr3]
@@ -226,8 +226,8 @@ class TestFilterAuthors(unittest.TestCase):
         gh = MagicMock()
         mock_auth.return_value = gh
         org_mock = MagicMock()
-        org_mock.repositories.return_value = [repo]
-        gh.organization.return_value = org_mock
+        org_mock.get_repos.return_value = [repo]
+        gh.get_organization.return_value = org_mock
 
         pr_alice = _make_pr(1, author="alice")
         pr_bob = _make_pr(2, author="bob")
@@ -263,8 +263,8 @@ class TestFilterAuthors(unittest.TestCase):
         gh = MagicMock()
         mock_auth.return_value = gh
         org_mock = MagicMock()
-        org_mock.repositories.return_value = [repo]
-        gh.organization.return_value = org_mock
+        org_mock.get_repos.return_value = [repo]
+        gh.get_organization.return_value = org_mock
 
         pr_bob = _make_pr(1, author="bob")
         pr_charlie = _make_pr(2, author="charlie")
@@ -308,8 +308,8 @@ class TestFilterTeams(unittest.TestCase):
         gh = MagicMock()
         mock_auth.return_value = gh
         org_mock = MagicMock()
-        org_mock.repositories.return_value = [repo]
-        gh.organization.return_value = org_mock
+        org_mock.get_repos.return_value = [repo]
+        gh.get_organization.return_value = org_mock
 
         mock_get_team.return_value = ["alice", "bob"]
 
@@ -353,8 +353,8 @@ class TestFilterTeams(unittest.TestCase):
         gh = MagicMock()
         mock_auth.return_value = gh
         org_mock = MagicMock()
-        org_mock.repositories.return_value = [repo]
-        gh.organization.return_value = org_mock
+        org_mock.get_repos.return_value = [repo]
+        gh.get_organization.return_value = org_mock
 
         mock_get_team.return_value = ["alice", "bob"]
 
@@ -398,8 +398,8 @@ class TestFilterTeams(unittest.TestCase):
         gh = MagicMock()
         mock_auth.return_value = gh
         org_mock = MagicMock()
-        org_mock.repositories.return_value = [repo]
-        gh.organization.return_value = org_mock
+        org_mock.get_repos.return_value = [repo]
+        gh.get_organization.return_value = org_mock
 
         mock_get_team.return_value = []
 
@@ -444,8 +444,8 @@ class TestFilterTeams(unittest.TestCase):
         gh = MagicMock()
         mock_auth.return_value = gh
         org_mock = MagicMock()
-        org_mock.repositories.return_value = [repo]
-        gh.organization.return_value = org_mock
+        org_mock.get_repos.return_value = [repo]
+        gh.get_organization.return_value = org_mock
 
         # alice is in both teams
         mock_get_team.side_effect = [["alice", "bob"], ["alice", "charlie"]]

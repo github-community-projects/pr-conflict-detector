@@ -34,10 +34,10 @@ def _make_conflict(pr_a, pr_b, files=None):
 
 
 def _make_mock_repo(existing_issues=None):
-    """Create a mock github3.py repository."""
+    """Create a mock PyGithub repository."""
     repo = MagicMock()
     repo.full_name = "owner/repo"
-    repo.issues.return_value = existing_issues or []
+    repo.get_issues.return_value = existing_issues or []
     new_issue = MagicMock()
     new_issue.html_url = "https://github.com/owner/repo/issues/99"
     repo.create_issue.return_value = new_issue

@@ -333,10 +333,10 @@ class TestDetectConflicts(unittest.TestCase):
 
         mock_gh = MagicMock()
         mock_repo = MagicMock()
-        mock_gh.repository.return_value = mock_repo
+        mock_gh.get_repo.return_value = mock_repo
         mock_pr = MagicMock()
         mock_pr.mergeable = False
-        mock_repo.pull_request.return_value = mock_pr
+        mock_repo.get_pull.return_value = mock_pr
 
         results = detect_conflicts(
             [pr_a, pr_b],
@@ -384,10 +384,10 @@ class TestVerifyConflict(unittest.TestCase):
         """Test that verify returns True when PR is not mergeable."""
         mock_gh = MagicMock()
         mock_repo = MagicMock()
-        mock_gh.repository.return_value = mock_repo
+        mock_gh.get_repo.return_value = mock_repo
         mock_pr = MagicMock()
         mock_pr.mergeable = False
-        mock_repo.pull_request.return_value = mock_pr
+        mock_repo.get_pull.return_value = mock_pr
 
         conflict = self._make_conflict()
         result = verify_conflict(conflict, mock_gh, "owner", "repo")
@@ -398,10 +398,10 @@ class TestVerifyConflict(unittest.TestCase):
         """Test that verify returns False when PR is mergeable."""
         mock_gh = MagicMock()
         mock_repo = MagicMock()
-        mock_gh.repository.return_value = mock_repo
+        mock_gh.get_repo.return_value = mock_repo
         mock_pr = MagicMock()
         mock_pr.mergeable = True
-        mock_repo.pull_request.return_value = mock_pr
+        mock_repo.get_pull.return_value = mock_pr
 
         conflict = self._make_conflict()
         result = verify_conflict(conflict, mock_gh, "owner", "repo")
@@ -411,7 +411,7 @@ class TestVerifyConflict(unittest.TestCase):
     def test_verify_returns_false_on_api_error(self):
         """Test that verify returns False when the API raises an error."""
         mock_gh = MagicMock()
-        mock_gh.repository.side_effect = Exception("API error")
+        mock_gh.get_repo.side_effect = Exception("API error")
 
         conflict = self._make_conflict()
         result = verify_conflict(conflict, mock_gh, "owner", "repo")
@@ -422,10 +422,10 @@ class TestVerifyConflict(unittest.TestCase):
         """When GitHub hasn't computed mergeability yet, mergeable is None."""
         mock_gh = MagicMock()
         mock_repo = MagicMock()
-        mock_gh.repository.return_value = mock_repo
+        mock_gh.get_repo.return_value = mock_repo
         mock_pr = MagicMock()
         mock_pr.mergeable = None
-        mock_repo.pull_request.return_value = mock_pr
+        mock_repo.get_pull.return_value = mock_pr
 
         conflict = self._make_conflict()
         result = verify_conflict(conflict, mock_gh, "owner", "repo")

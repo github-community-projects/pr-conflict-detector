@@ -59,17 +59,17 @@ def parse_patch_line_ranges(patch: str | None) -> list[tuple[int, int]]:
 
 def get_open_prs(repo: object, include_drafts: bool = True) -> list[PullRequestData]:
     """
-    Fetch all open PRs from a github3-py repository object.
+    Fetch all open PRs from a PyGithub repository object.
 
     Args:
-        repo: A github3-py repository object.
+        repo: A PyGithub repository object.
         include_drafts: If False, filter out draft PRs.
 
     Returns:
         A list of PullRequestData objects (without changed files populated).
     """
     prs: list[PullRequestData] = []
-    for pr in repo.pull_requests(state="open"):  # type: ignore[attr-defined]
+    for pr in repo.get_pulls(state="open"):  # type: ignore[attr-defined]
         is_draft = getattr(pr, "draft", False) or False
         if not include_drafts and is_draft:
             continue
@@ -97,12 +97,12 @@ def get_pr_changed_files(  # pylint: disable=unused-argument
     """
     Fetch the list of changed files for a given pull request.
 
-    Uses the github3-py pull request's files() method, then parses
+    Uses the PyGithub pull request's files() method, then parses
     each file's patch to extract modified line ranges.
 
     Args:
-        pull_request: A github3-py ShortPullRequest or PullRequest object.
-        github_connection: The github3-py GitHub connection (unused but kept
+        pull_request: A PyGithub ShortPullRequest or PullRequest object.
+        github_connection: The PyGithub GitHub connection (unused but kept
             for API consistency with other OSPO actions).
         owner: The repository owner.
         repo_name: The repository name.
@@ -111,7 +111,7 @@ def get_pr_changed_files(  # pylint: disable=unused-argument
         A list of ChangedFile objects.
     """
     changed_files: list[ChangedFile] = []
-    for f in pull_request.files():  # type: ignore[attr-defined]
+    for f in pull_request.get_files():  # type: ignore[attr-defined]
         patch = getattr(f, "patch", None)
         changed_files.append(
             ChangedFile(
@@ -137,9 +137,9 @@ def fetch_all_pr_data(
     Fetch all open PRs and their changed files from a repository.
 
     Args:
-        repo: A github3-py repository object.
+        repo: A PyGithub repository object.
         include_drafts: If False, filter out draft PRs.
-        github_connection: The github3-py GitHub connection.
+        github_connection: The PyGithub GitHub connection.
         owner: The repository owner.
         repo_name: The repository name.
         filter_authors: If provided, only fetch file changes for PRs authored
@@ -172,7 +172,7 @@ def fetch_all_pr_data(
 
         try:
             # Re-fetch the full PR object to call files()
-            full_pr = repo.pull_request(pr_data.number)  # type: ignore[attr-defined]
+            full_pr = repo.get_pull(pr_data.number)  # type: ignore[attr-defined]
             pr_data.changed_files = get_pr_changed_files(
                 full_pr, github_connection, owner, repo_name
             )
