@@ -1,16 +1,6 @@
 """This is the module that contains functions related to authenticating to GitHub with a personal access token."""
 
 from github import Auth, Github, GithubIntegration
-from urllib3.util.retry import Retry
-
-# Retry strategy: 5 retries with exponential backoff for transient errors
-RETRY_STRATEGY = Retry(
-    total=5,
-    backoff_factor=1,  # 1s, 2s, 4s, 8s, 16s
-    status_forcelist=[429, 500, 502, 503, 504],
-    raise_on_status=False,
-)
-REQUEST_TIMEOUT = 30  # seconds
 
 
 def auth_to_github(
@@ -35,6 +25,8 @@ def auth_to_github(
     Returns:
         Github: the GitHub connection object
     """
+    ghe = ghe.rstrip("/")
+
     if gh_app_id and gh_app_private_key_bytes and gh_app_installation_id:
         app_auth = Auth.AppAuth(int(gh_app_id), gh_app_private_key_bytes.decode())
         installation_auth = app_auth.get_installation_auth(int(gh_app_installation_id))
@@ -42,28 +34,16 @@ def auth_to_github(
             github_connection = Github(
                 base_url=f"{ghe}/api/v3",
                 auth=installation_auth,
-                retry=RETRY_STRATEGY,
-                timeout=REQUEST_TIMEOUT,
             )
         else:
-            github_connection = Github(
-                auth=installation_auth,
-                retry=RETRY_STRATEGY,
-                timeout=REQUEST_TIMEOUT,
-            )
+            github_connection = Github(auth=installation_auth)
     elif ghe and token:
         github_connection = Github(
             base_url=f"{ghe}/api/v3",
             auth=Auth.Token(token),
-            retry=RETRY_STRATEGY,
-            timeout=REQUEST_TIMEOUT,
         )
     elif token:
-        github_connection = Github(
-            auth=Auth.Token(token),
-            retry=RETRY_STRATEGY,
-            timeout=REQUEST_TIMEOUT,
-        )
+        github_connection = Github(auth=Auth.Token(token))
     else:
         raise ValueError(
             "GH_TOKEN or the set of [GH_APP_ID, GH_APP_INSTALLATION_ID, "
@@ -93,6 +73,7 @@ def get_github_app_installation_token(
         str: the GitHub App token
     """
     try:
+        ghe = ghe.rstrip("/")
         app_auth = Auth.AppAuth(int(gh_app_id), gh_app_private_key_bytes.decode())
         if ghe:
             gi = GithubIntegration(auth=app_auth, base_url=f"{ghe}/api/v3")

@@ -70,8 +70,7 @@ def post_pr_comments(
 
     for repo_name in all_repo_names:
         conflicts = all_conflicts_by_repo.get(repo_name, [])
-        owner, repo = repo_name.split("/")
-        repo_obj = github_connection.get_repo(f"{owner}/{repo}")
+        repo_obj = github_connection.get_repo(repo_name)
 
         # Group active conflicts by PR
         pr_conflicts = group_conflicts_by_pr(conflicts) if conflicts else {}

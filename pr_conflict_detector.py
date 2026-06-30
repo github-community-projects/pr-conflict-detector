@@ -217,8 +217,7 @@ def main():
         print("Report issue creation disabled (ENABLE_REPORT_ISSUES=false)")
     elif not env_vars.dry_run:
         for repo_full_name, conflicts in all_conflicts.items():
-            owner, rname = repo_full_name.split("/")
-            repo_obj = github_connection.get_repo(f"{owner}/{rname}")
+            repo_obj = github_connection.get_repo(repo_full_name)
             issue_url = create_or_update_issue(
                 repo_obj, conflicts, env_vars.report_title, env_vars.dry_run
             )
@@ -284,8 +283,7 @@ def get_repos_iterator(github_connection, env_vars):
 
     repos = []
     for repo_full_name in env_vars.repository_list:
-        owner, repo_name = repo_full_name.split("/")
-        repos.append(github_connection.get_repo(f"{owner}/{repo_name}"))
+        repos.append(github_connection.get_repo(repo_full_name))
     return repos
 
 

@@ -97,7 +97,7 @@ def get_pr_changed_files(  # pylint: disable=unused-argument
     """
     Fetch the list of changed files for a given pull request.
 
-    Uses the PyGithub pull request's files() method, then parses
+    Uses the PyGithub pull request's get_files() method, then parses
     each file's patch to extract modified line ranges.
 
     Args:
@@ -171,7 +171,7 @@ def fetch_all_pr_data(
             print(f"  Progress: {i + 1}/{total} PRs processed")
 
         try:
-            # Re-fetch the full PR object to call files()
+            # Re-fetch the full PR object to call get_files()
             full_pr = repo.get_pull(pr_data.number)  # type: ignore[attr-defined]
             pr_data.changed_files = get_pr_changed_files(
                 full_pr, github_connection, owner, repo_name
