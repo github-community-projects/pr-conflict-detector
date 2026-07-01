@@ -70,7 +70,7 @@ def get_github_app_installation_token(
         gh_app_installation_id (str): the GitHub App Installation ID
 
     Returns:
-        str: the GitHub App token
+        str | None: the GitHub App token, or None if the request fails
     """
     try:
         ghe = ghe.rstrip("/")
