@@ -27,7 +27,7 @@ class TestPostPRComments(unittest.TestCase):
 
         gh = MagicMock()
         repo_mock = MagicMock()
-        gh.repository.return_value = repo_mock
+        gh.get_repo.return_value = repo_mock
 
         result = pr_comment.post_pr_comments(conflicts, gh)
 
@@ -49,7 +49,7 @@ class TestPostPRComments(unittest.TestCase):
 
         gh = MagicMock()
         repo_mock = MagicMock()
-        gh.repository.return_value = repo_mock
+        gh.get_repo.return_value = repo_mock
 
         result = pr_comment.post_pr_comments(conflicts, gh)
 
@@ -67,7 +67,7 @@ class TestPostPRComments(unittest.TestCase):
         result = pr_comment.post_pr_comments(conflicts, gh, dry_run=True)
 
         self.assertTrue(result)
-        gh.repository.assert_called_once_with("org", "repo")
+        gh.get_repo.assert_called_once_with("org/repo")
 
     @patch("pr_comment._post_comment", return_value=True)
     @patch("pr_comment._find_existing_comments", return_value=[])
@@ -88,7 +88,7 @@ class TestPostPRComments(unittest.TestCase):
 
         gh = MagicMock()
         repo_mock = MagicMock()
-        gh.repository.return_value = repo_mock
+        gh.get_repo.return_value = repo_mock
 
         result = pr_comment.post_pr_comments(conflicts, gh)
 
@@ -112,7 +112,7 @@ class TestPostPRComments(unittest.TestCase):
         conflicts = {"org/repo": [conflict]}
 
         gh = MagicMock()
-        gh.repository.return_value = MagicMock()
+        gh.get_repo.return_value = MagicMock()
 
         new_keys = {(1, 2)}
         result = pr_comment.post_pr_comments(conflicts, gh, new_conflict_keys=new_keys)
@@ -136,7 +136,7 @@ class TestPostPRComments(unittest.TestCase):
         conflicts = {"org/repo": [conflict]}
 
         gh = MagicMock()
-        gh.repository.return_value = MagicMock()
+        gh.get_repo.return_value = MagicMock()
 
         # Only the reversed tuple is present — the disjunction's second half must fire.
         new_keys = {(2, 1)}
@@ -158,7 +158,7 @@ class TestPostPRComments(unittest.TestCase):
         conflicts = {"org/repo": [conflict]}
 
         gh = MagicMock()
-        gh.repository.return_value = MagicMock()
+        gh.get_repo.return_value = MagicMock()
 
         result = pr_comment.post_pr_comments(conflicts, gh)
         self.assertFalse(result)
@@ -175,7 +175,7 @@ class TestPostPRComments(unittest.TestCase):
         mock_find.return_value = [MagicMock()]
 
         gh = MagicMock()
-        gh.repository.return_value = MagicMock()
+        gh.get_repo.return_value = MagicMock()
 
         result = pr_comment.post_pr_comments(conflicts, gh)
         self.assertFalse(result)
@@ -188,13 +188,13 @@ class TestFindExistingComments(unittest.TestCase):
         """Should return all comments with the bot signature."""
         repo = MagicMock()
         pr = MagicMock()
-        repo.pull_request.return_value = pr
+        repo.get_pull.return_value = pr
 
         comment1 = MagicMock()
         comment1.body = "Some random comment"
         comment2 = MagicMock()
         comment2.body = f"{pr_comment.COMMENT_SIGNATURE}\nConflict info"
-        pr.issue_comments.return_value = [comment1, comment2]
+        pr.get_issue_comments.return_value = [comment1, comment2]
 
         result = pr_comment._find_existing_comments(repo, 123)
         self.assertEqual(result, [comment2])
@@ -203,7 +203,7 @@ class TestFindExistingComments(unittest.TestCase):
         """Should return all bot comments for stale cleanup."""
         repo = MagicMock()
         pr = MagicMock()
-        repo.pull_request.return_value = pr
+        repo.get_pull.return_value = pr
 
         comment1 = MagicMock()
         comment1.body = f"{pr_comment.COMMENT_SIGNATURE}\nOld conflict with #200"
@@ -211,7 +211,7 @@ class TestFindExistingComments(unittest.TestCase):
         comment2.body = f"{pr_comment.COMMENT_SIGNATURE}\nOld conflict with #300"
         comment3 = MagicMock()
         comment3.body = f"{pr_comment.COMMENT_SIGNATURE}\nOld conflict with #400"
-        pr.issue_comments.return_value = [comment1, comment2, comment3]
+        pr.get_issue_comments.return_value = [comment1, comment2, comment3]
 
         result = pr_comment._find_existing_comments(repo, 123)
         self.assertEqual(len(result), 3)
@@ -221,11 +221,11 @@ class TestFindExistingComments(unittest.TestCase):
         """Should return empty list if no matching comment exists."""
         repo = MagicMock()
         pr = MagicMock()
-        repo.pull_request.return_value = pr
+        repo.get_pull.return_value = pr
 
         comment1 = MagicMock()
         comment1.body = "Regular comment"
-        pr.issue_comments.return_value = [comment1]
+        pr.get_issue_comments.return_value = [comment1]
 
         result = pr_comment._find_existing_comments(repo, 123)
         self.assertEqual(result, [])
@@ -233,7 +233,7 @@ class TestFindExistingComments(unittest.TestCase):
     def test_find_existing_comments_error_handling(self):
         """Should return empty list on error to avoid blocking."""
         repo = MagicMock()
-        repo.pull_request.side_effect = Exception("API error")
+        repo.get_pull.side_effect = Exception("API error")
 
         result = pr_comment._find_existing_comments(repo, 123)
         self.assertEqual(result, [])
@@ -246,19 +246,19 @@ class TestPostComment(unittest.TestCase):
         """Should successfully post a comment."""
         repo = MagicMock()
         pr = MagicMock()
-        repo.pull_request.return_value = pr
+        repo.get_pull.return_value = pr
 
         result = pr_comment._post_comment(repo, 123, "Test comment")
 
         self.assertTrue(result)
-        pr.create_comment.assert_called_once_with("Test comment")
+        pr.create_issue_comment.assert_called_once_with(body="Test comment")
 
     def test_post_comment_failure(self):
         """Should return False on error."""
         repo = MagicMock()
         pr = MagicMock()
-        repo.pull_request.return_value = pr
-        pr.create_comment.side_effect = Exception("API error")
+        repo.get_pull.return_value = pr
+        pr.create_issue_comment.side_effect = Exception("API error")
 
         result = pr_comment._post_comment(repo, 123, "Test comment")
 
@@ -285,7 +285,7 @@ class TestStaleCommentCleanup(unittest.TestCase):
         mock_find.return_value = [stale1, stale2, stale3]
 
         gh = MagicMock()
-        gh.repository.return_value = MagicMock()
+        gh.get_repo.return_value = MagicMock()
 
         result = pr_comment.post_pr_comments(conflicts, gh)
 
@@ -302,7 +302,7 @@ class TestStaleCommentCleanup(unittest.TestCase):
         conflicts = {"org/repo": [conflict]}
 
         gh = MagicMock()
-        gh.repository.return_value = MagicMock()
+        gh.get_repo.return_value = MagicMock()
 
         with patch("pr_comment.logger") as mock_logger:
             pr_comment.post_pr_comments(conflicts, gh, dry_run=True)
@@ -319,7 +319,7 @@ class TestStaleCommentCleanup(unittest.TestCase):
         mock_find.return_value = [MagicMock()]
 
         gh = MagicMock()
-        gh.repository.return_value = MagicMock()
+        gh.get_repo.return_value = MagicMock()
 
         with patch("pr_comment.logger") as mock_logger:
             pr_comment.post_pr_comments(conflicts, gh, dry_run=True)
@@ -336,7 +336,7 @@ class TestStaleCommentCleanup(unittest.TestCase):
         mock_find.return_value = [MagicMock(), MagicMock(), MagicMock()]
 
         gh = MagicMock()
-        gh.repository.return_value = MagicMock()
+        gh.get_repo.return_value = MagicMock()
 
         with patch("pr_comment.logger") as mock_logger:
             pr_comment.post_pr_comments(conflicts, gh, dry_run=True)

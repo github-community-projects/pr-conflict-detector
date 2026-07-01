@@ -77,7 +77,7 @@ def _make_mock_pr(
     base_ref: str = "main",
     head_ref: str = "feature",
 ):
-    """Create a mock github3 pull request object."""
+    """Create a mock PyGithub pull request object."""
     pr = MagicMock()
     pr.number = number
     pr.title = title
@@ -95,7 +95,7 @@ class TestGetOpenPrs(unittest.TestCase):
     def test_basic_pr_listing(self):
         """Should return PullRequestData objects for all open PRs."""
         mock_repo = MagicMock()
-        mock_repo.pull_requests.return_value = [
+        mock_repo.get_pulls.return_value = [
             _make_mock_pr(number=1, title="First PR"),
             _make_mock_pr(number=2, title="Second PR"),
         ]
@@ -106,12 +106,12 @@ class TestGetOpenPrs(unittest.TestCase):
         self.assertEqual(result[0].number, 1)
         self.assertEqual(result[0].title, "First PR")
         self.assertEqual(result[1].number, 2)
-        mock_repo.pull_requests.assert_called_once_with(state="open")
+        mock_repo.get_pulls.assert_called_once_with(state="open")
 
     def test_filter_drafts(self):
         """When include_drafts=False, draft PRs should be excluded."""
         mock_repo = MagicMock()
-        mock_repo.pull_requests.return_value = [
+        mock_repo.get_pulls.return_value = [
             _make_mock_pr(number=1, draft=False),
             _make_mock_pr(number=2, draft=True),
             _make_mock_pr(number=3, draft=False),
@@ -126,7 +126,7 @@ class TestGetOpenPrs(unittest.TestCase):
     def test_include_drafts(self):
         """When include_drafts=True (default), drafts should be included."""
         mock_repo = MagicMock()
-        mock_repo.pull_requests.return_value = [
+        mock_repo.get_pulls.return_value = [
             _make_mock_pr(number=1, draft=True),
             _make_mock_pr(number=2, draft=True),
         ]
@@ -140,7 +140,7 @@ class TestGetOpenPrs(unittest.TestCase):
     def test_empty_repo(self):
         """A repo with no open PRs should return an empty list."""
         mock_repo = MagicMock()
-        mock_repo.pull_requests.return_value = []
+        mock_repo.get_pulls.return_value = []
 
         result = get_open_prs(mock_repo)
 
@@ -149,7 +149,7 @@ class TestGetOpenPrs(unittest.TestCase):
     def test_pr_data_fields(self):
         """All PullRequestData fields should be correctly populated."""
         mock_repo = MagicMock()
-        mock_repo.pull_requests.return_value = [
+        mock_repo.get_pulls.return_value = [
             _make_mock_pr(
                 number=42,
                 title="Add feature X",
@@ -181,7 +181,7 @@ def _make_mock_file(
     changes: int = 7,
     patch_str: str | None = "@@ -1,3 +1,5 @@\n+new line",
 ):
-    """Create a mock github3 pull request file object."""
+    """Create a mock PyGithub pull request file object."""
     f = MagicMock()
     f.filename = filename
     f.additions = additions
@@ -197,7 +197,7 @@ class TestGetPrChangedFiles(unittest.TestCase):
     def test_basic_changed_files(self):
         """Should return ChangedFile objects with parsed line ranges."""
         mock_pr = MagicMock()
-        mock_pr.files.return_value = [
+        mock_pr.get_files.return_value = [
             _make_mock_file(
                 filename="src/main.py",
                 additions=3,
@@ -219,7 +219,7 @@ class TestGetPrChangedFiles(unittest.TestCase):
     def test_binary_file_no_patch(self):
         """Binary files with no patch should have empty patch_lines."""
         mock_pr = MagicMock()
-        mock_pr.files.return_value = [
+        mock_pr.get_files.return_value = [
             _make_mock_file(filename="image.png", patch_str=None),
         ]
 
@@ -232,7 +232,7 @@ class TestGetPrChangedFiles(unittest.TestCase):
     def test_multiple_files(self):
         """Should handle multiple changed files."""
         mock_pr = MagicMock()
-        mock_pr.files.return_value = [
+        mock_pr.get_files.return_value = [
             _make_mock_file(filename="a.py", patch_str="@@ -1,2 +1,3 @@\n+x"),
             _make_mock_file(filename="b.py", patch_str="@@ -5,4 +5,6 @@\n+y"),
             _make_mock_file(filename="c.bin", patch_str=None),
@@ -248,7 +248,7 @@ class TestGetPrChangedFiles(unittest.TestCase):
     def test_empty_files_list(self):
         """A PR with no changed files should return empty list."""
         mock_pr = MagicMock()
-        mock_pr.files.return_value = []
+        mock_pr.get_files.return_value = []
 
         result = get_pr_changed_files(mock_pr, MagicMock(), "owner", "repo")
 
@@ -283,17 +283,17 @@ class TestFetchAllPrData(unittest.TestCase):
 
         mock_repo = MagicMock()
         mock_full_pr = MagicMock()
-        mock_full_pr.files.return_value = [
+        mock_full_pr.get_files.return_value = [
             _make_mock_file(filename="test.py", patch_str="@@ -1,2 +1,3 @@\n+x"),
         ]
-        mock_repo.pull_request.return_value = mock_full_pr
+        mock_repo.get_pull.return_value = mock_full_pr
 
         result = fetch_all_pr_data(mock_repo, True, MagicMock(), "owner", "repo")
 
         self.assertEqual(len(result), 2)
         self.assertEqual(len(result[0].changed_files), 1)
         self.assertEqual(result[0].changed_files[0].filename, "test.py")
-        self.assertEqual(mock_repo.pull_request.call_count, 2)
+        self.assertEqual(mock_repo.get_pull.call_count, 2)
 
     @patch("pr_data.get_open_prs")
     def test_empty_repo(self, mock_get_open_prs):
@@ -329,7 +329,7 @@ class TestFetchAllPrData(unittest.TestCase):
 
         mock_repo = MagicMock()
         mock_full_pr_good = MagicMock()
-        mock_full_pr_good.files.return_value = [
+        mock_full_pr_good.get_files.return_value = [
             _make_mock_file(filename="good.py"),
         ]
 
@@ -338,7 +338,7 @@ class TestFetchAllPrData(unittest.TestCase):
                 raise RuntimeError("API rate limit exceeded")
             return mock_full_pr_good
 
-        mock_repo.pull_request.side_effect = side_effect
+        mock_repo.get_pull.side_effect = side_effect
 
         result = fetch_all_pr_data(mock_repo, True, MagicMock(), "owner", "repo")
 
@@ -367,8 +367,8 @@ class TestFetchAllPrData(unittest.TestCase):
 
         mock_repo = MagicMock()
         mock_full_pr = MagicMock()
-        mock_full_pr.files.return_value = []
-        mock_repo.pull_request.return_value = mock_full_pr
+        mock_full_pr.get_files.return_value = []
+        mock_repo.get_pull.return_value = mock_full_pr
 
         fetch_all_pr_data(mock_repo, True, MagicMock(), "owner", "repo")
 
@@ -423,10 +423,10 @@ class TestFetchAllPrData(unittest.TestCase):
 
         mock_repo = MagicMock()
         mock_full_pr = MagicMock()
-        mock_full_pr.files.return_value = [
+        mock_full_pr.get_files.return_value = [
             _make_mock_file(filename="test.py", patch_str="@@ -1,2 +1,3 @@\n+x"),
         ]
-        mock_repo.pull_request.return_value = mock_full_pr
+        mock_repo.get_pull.return_value = mock_full_pr
 
         result = fetch_all_pr_data(
             mock_repo,
@@ -442,7 +442,7 @@ class TestFetchAllPrData(unittest.TestCase):
         authors = {pr.author for pr in result}
         self.assertEqual(authors, {"alice", "bob"})
         # Only 2 API calls for files, not 3
-        self.assertEqual(mock_repo.pull_request.call_count, 2)
+        self.assertEqual(mock_repo.get_pull.call_count, 2)
 
     @patch("pr_data.get_open_prs")
     def test_filter_authors_none_fetches_all(self, mock_get_open_prs):
@@ -469,8 +469,8 @@ class TestFetchAllPrData(unittest.TestCase):
 
         mock_repo = MagicMock()
         mock_full_pr = MagicMock()
-        mock_full_pr.files.return_value = []
-        mock_repo.pull_request.return_value = mock_full_pr
+        mock_full_pr.get_files.return_value = []
+        mock_repo.get_pull.return_value = mock_full_pr
 
         result = fetch_all_pr_data(
             mock_repo,
@@ -482,4 +482,4 @@ class TestFetchAllPrData(unittest.TestCase):
         )
 
         self.assertEqual(len(result), 2)
-        self.assertEqual(mock_repo.pull_request.call_count, 2)
+        self.assertEqual(mock_repo.get_pull.call_count, 2)

@@ -56,8 +56,8 @@ class TestDryRunSkipsIssues(unittest.TestCase):
         gh = MagicMock()
         mock_auth.return_value = gh
         org_mock = MagicMock()
-        org_mock.repositories.return_value = [repo]
-        gh.organization.return_value = org_mock
+        org_mock.get_repos.return_value = [repo]
+        gh.get_organization.return_value = org_mock
 
         mock_fetch.return_value = [_make_pr(1), _make_pr(2)]
         mock_detect.return_value = [MagicMock()]
@@ -102,8 +102,8 @@ class TestEnableReportIssues(unittest.TestCase):
         gh = MagicMock()
         mock_auth.return_value = gh
         org_mock = MagicMock()
-        org_mock.repositories.return_value = [repo]
-        gh.organization.return_value = org_mock
+        org_mock.get_repos.return_value = [repo]
+        gh.get_organization.return_value = org_mock
 
         pr1, pr2 = _make_pr(1), _make_pr(2)
         mock_fetch.return_value = [pr1, pr2]
@@ -135,8 +135,8 @@ class TestEnableReportIssues(unittest.TestCase):
         gh = MagicMock()
         mock_auth.return_value = gh
         org_mock = MagicMock()
-        org_mock.repositories.return_value = [repo]
-        gh.organization.return_value = org_mock
+        org_mock.get_repos.return_value = [repo]
+        gh.get_organization.return_value = org_mock
 
         pr1, pr2 = _make_pr(1), _make_pr(2)
         mock_fetch.return_value = [pr1, pr2]
@@ -199,8 +199,8 @@ class TestNotificationSuppression(unittest.TestCase):
         mock_auth.return_value = gh
         repo = _make_repo("test-org/repo-a")
         org_mock = MagicMock()
-        org_mock.repositories.return_value = [repo]
-        gh.organization.return_value = org_mock
+        org_mock.get_repos.return_value = [repo]
+        gh.get_organization.return_value = org_mock
 
         mock_fetch.return_value = [_make_pr(1), _make_pr(2)]
         mock_detect.return_value = [conflict]
@@ -395,8 +395,8 @@ class TestSameAuthorConflictsFiltered(unittest.TestCase):
         gh = MagicMock()
         mock_auth.return_value = gh
         org_mock = MagicMock()
-        org_mock.repositories.return_value = [repo]
-        gh.organization.return_value = org_mock
+        org_mock.get_repos.return_value = [repo]
+        gh.get_organization.return_value = org_mock
 
         pr1 = _make_pr(1, author="alice")
         pr2 = _make_pr(2, author="alice")

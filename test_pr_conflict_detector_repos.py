@@ -15,13 +15,13 @@ class TestGetReposIteratorOrg(unittest.TestCase):
         env_vars = _make_env_vars(organization="test-org", repository_list=[])
         gh = MagicMock()
         org_mock = MagicMock()
-        org_mock.repositories.return_value = ["repo1", "repo2"]
-        gh.organization.return_value = org_mock
+        org_mock.get_repos.return_value = ["repo1", "repo2"]
+        gh.get_organization.return_value = org_mock
 
         result = get_repos_iterator(gh, env_vars)
 
-        gh.organization.assert_called_once_with("test-org")
-        org_mock.repositories.assert_called_once()
+        gh.get_organization.assert_called_once_with("test-org")
+        org_mock.get_repos.assert_called_once()
         self.assertEqual(result, ["repo1", "repo2"])
 
 
@@ -37,11 +37,11 @@ class TestGetReposIteratorRepoList(unittest.TestCase):
         gh = MagicMock()
         repo_a = MagicMock()
         repo_b = MagicMock()
-        gh.repository.side_effect = [repo_a, repo_b]
+        gh.get_repo.side_effect = [repo_a, repo_b]
 
         result = get_repos_iterator(gh, env_vars)
 
-        self.assertEqual(gh.repository.call_count, 2)
-        gh.repository.assert_any_call("owner", "repo-a")
-        gh.repository.assert_any_call("owner", "repo-b")
+        self.assertEqual(gh.get_repo.call_count, 2)
+        gh.get_repo.assert_any_call("owner/repo-a")
+        gh.get_repo.assert_any_call("owner/repo-b")
         self.assertEqual(result, [repo_a, repo_b])

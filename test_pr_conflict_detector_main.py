@@ -38,8 +38,8 @@ class TestMainWithOrganization(unittest.TestCase):
         gh = MagicMock()
         mock_auth.return_value = gh
         org_mock = MagicMock()
-        org_mock.repositories.return_value = [repo]
-        gh.organization.return_value = org_mock
+        org_mock.get_repos.return_value = [repo]
+        gh.get_organization.return_value = org_mock
 
         pr1, pr2 = _make_pr(1), _make_pr(2)
         mock_fetch.return_value = [pr1, pr2]
@@ -100,7 +100,7 @@ class TestMainWithRepositoryList(unittest.TestCase):
         gh = MagicMock()
         mock_auth.return_value = gh
         repo = _make_repo("owner/repo-x")
-        gh.repository.return_value = repo
+        gh.get_repo.return_value = repo
 
         pr1, pr2 = _make_pr(1), _make_pr(2)
         mock_fetch.return_value = [pr1, pr2]
@@ -108,7 +108,7 @@ class TestMainWithRepositoryList(unittest.TestCase):
 
         main()
 
-        gh.repository.assert_called_once_with("owner", "repo-x")
+        gh.get_repo.assert_called_once_with("owner/repo-x")
         mock_fetch.assert_called_once()
         mock_detect.assert_called_once()
         # No conflicts → no issue created

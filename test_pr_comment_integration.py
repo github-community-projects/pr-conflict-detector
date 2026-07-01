@@ -80,7 +80,7 @@ class TestPostPRCommentsWithResolved(unittest.TestCase):
 
         gh = MagicMock()
         repo_mock = MagicMock()
-        gh.repository.return_value = repo_mock
+        gh.get_repo.return_value = repo_mock
 
         result = pr_comment.post_pr_comments(
             conflicts, gh, resolved_entries=resolved_entries

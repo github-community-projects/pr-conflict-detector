@@ -30,8 +30,8 @@ class TestExcludeAuthors(unittest.TestCase):
         gh = MagicMock()
         mock_auth.return_value = gh
         org_mock = MagicMock()
-        org_mock.repositories.return_value = [repo]
-        gh.organization.return_value = org_mock
+        org_mock.get_repos.return_value = [repo]
+        gh.get_organization.return_value = org_mock
 
     @patch("pr_conflict_detector.auth.get_team_members")
     def test_exclude_removes_team_member(
