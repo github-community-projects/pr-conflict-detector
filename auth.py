@@ -81,7 +81,7 @@ def get_github_app_installation_token(
             gi = GithubIntegration(auth=app_auth)
         installation_token = gi.get_access_token(int(gh_app_installation_id))
         return installation_token.token
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except Exception as e:  # noqa: BLE001  # pylint: disable=broad-exception-caught
         print(f"Request failed: {e}")
         return None
 
@@ -120,7 +120,7 @@ def get_team_members(
         members = [m.login for m in team.get_members()]
         print(f"  Resolved team {org}/{team_slug}: {len(members)} member(s)")
         return members
-    except Exception as e:  # pylint: disable=broad-except
+    except Exception as e:  # noqa: BLE001  # pylint: disable=broad-except
         print(
             f"  ⚠️  Error fetching team '{org}/{team_slug}': {e} "
             "(check token permissions: read:org)"

@@ -4,6 +4,7 @@ import json
 import logging
 
 import requests
+
 from conflict_detector import ConflictCluster, cluster_conflicts
 
 logger = logging.getLogger(__name__)

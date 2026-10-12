@@ -176,7 +176,7 @@ def fetch_all_pr_data(
             pr_data.changed_files = get_pr_changed_files(
                 full_pr, github_connection, owner, repo_name
             )
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc:  # noqa: BLE001  # pylint: disable=broad-except
             print(f"  Warning: Failed to fetch files for PR #{pr_data.number}: {exc}")
             continue
 

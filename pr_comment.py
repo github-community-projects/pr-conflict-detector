@@ -164,7 +164,7 @@ def _find_existing_comments(repo: Any, pr_number: int) -> list[Any]:
     try:
         pr = repo.get_pull(pr_number)
         return [c for c in pr.get_issue_comments() if COMMENT_SIGNATURE in c.body]
-    except Exception as e:  # pylint: disable=broad-except
+    except Exception as e:  # noqa: BLE001  # pylint: disable=broad-except
         logger.warning("Failed to check existing comments on PR #%s: %s", pr_number, e)
         return []
 
@@ -183,7 +183,7 @@ def _update_comment(comment: Any, body: str) -> bool:
         comment.edit(body)
         logger.info("Updated existing comment (id=%s)", comment.id)
         return True
-    except Exception as e:  # pylint: disable=broad-except
+    except Exception as e:  # noqa: BLE001  # pylint: disable=broad-except
         logger.error("Failed to update comment (id=%s): %s", comment.id, e)
         return False
 
@@ -204,7 +204,7 @@ def _delete_comment(comment: Any) -> bool:
         comment.delete()
         logger.info("Deleted stale bot comment (id=%s)", comment.id)
         return True
-    except Exception as e:  # pylint: disable=broad-except
+    except Exception as e:  # noqa: BLE001  # pylint: disable=broad-except
         logger.warning("Failed to delete stale comment (id=%s): %s", comment.id, e)
         return False
 
@@ -225,6 +225,6 @@ def _post_comment(repo, pr_number: int, body: str) -> bool:
         pr.create_issue_comment(body=body)
         logger.info("Posted comment to PR #%s", pr_number)
         return True
-    except Exception as e:  # pylint: disable=broad-except
+    except Exception as e:  # noqa: BLE001  # pylint: disable=broad-except
         logger.error("Failed to post comment to PR #%s: %s", pr_number, e)
         return False
