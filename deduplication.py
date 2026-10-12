@@ -16,15 +16,13 @@ from fingerprint import (  # re-exported for consumers
 )
 
 __all__ = [
-    # Re-exported fingerprint types for backward compatibility
     "ConflictFingerprint",
     "DeduplicationResult",
     "PRDisplayInfo",
+    "compare_conflicts",
     "conflict_to_fingerprint",
     "dict_to_fingerprint",
     "fingerprint_to_dict",
-    # Core deduplication functions
-    "compare_conflicts",
     "load_state",
     "prune_expired_conflicts",
     "save_state",

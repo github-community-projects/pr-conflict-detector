@@ -161,11 +161,8 @@ def verify_conflict(
         pr_b = repo.get_pull(conflict.pr_b.number)
 
         # If either PR is not mergeable on its own, they likely conflict
-        if pr_a.mergeable is False or pr_b.mergeable is False:
-            return True
-
-        return False
-    except Exception:  # pylint: disable=broad-except
+        return pr_a.mergeable is False or pr_b.mergeable is False
+    except Exception:  # noqa: BLE001  # pylint: disable=broad-except
         return False
 
 

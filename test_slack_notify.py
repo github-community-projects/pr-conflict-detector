@@ -5,6 +5,7 @@ from collections import namedtuple
 from unittest.mock import MagicMock, patch
 
 import requests
+
 import slack_notify
 from conflict_detector import ConflictCluster
 
