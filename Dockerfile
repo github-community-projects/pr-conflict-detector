@@ -11,10 +11,10 @@ COPY pyproject.toml uv.lock *.py /action/workspace/
 
 RUN apt-get -y update \
     && apt-get -y install --no-install-recommends \
-        build-essential \
+        build-essential=12.12 \
         git=1:2.47.3-0+deb13u1 \
-        libffi-dev \
-        libffi8 \
+        libffi-dev=3.4.8-2 \
+        libffi8=3.4.8-2 \
     && uv sync --frozen --no-dev --no-editable \
     && apt-get -y purge --auto-remove build-essential libffi-dev \
     && rm -rf /var/lib/apt/lists/*
