@@ -9,9 +9,14 @@ COPY --from=ghcr.io/astral-sh/uv:0.10.9@sha256:10902f58a1606787602f303954cea0996
 WORKDIR /action/workspace
 COPY pyproject.toml uv.lock *.py /action/workspace/
 
-RUN uv sync --frozen --no-dev --no-editable \
-    && apt-get -y update \
-    && apt-get -y install --no-install-recommends git=1:2.47.3-0+deb13u1 \
+RUN apt-get -y update \
+    && apt-get -y install --no-install-recommends \
+        build-essential \
+        git=1:2.47.3-0+deb13u1 \
+        libffi-dev \
+        libffi8 \
+    && uv sync --frozen --no-dev --no-editable \
+    && apt-get -y purge --auto-remove build-essential libffi-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Add a simple healthcheck to satisfy container scanners
