@@ -16,8 +16,6 @@ This is a GitHub Action that given an organization or specified repositories, de
 ## Repository Structure
 
 - `Makefile`: Contains commands for linting, testing, and other tasks
-- `requirements.txt`: Python dependencies for the project
-- `requirements-test.txt`: Python dependencies for testing
 - `README.md`: Project documentation and setup instructions
 - `test_*.py`: Python test files matching the naming convention for test discovery
 
